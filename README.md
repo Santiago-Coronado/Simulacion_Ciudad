@@ -1,2 +1,2 @@
-# Simulaci-n_Ciudad
-Proyecto de Clase de Multiagentes y Gráficas Computacionales
+# Simulación_Ciudad
+## Proyecto de Modelación de sistemas multiagentes con gráficas computacionales (Gpo 302)
