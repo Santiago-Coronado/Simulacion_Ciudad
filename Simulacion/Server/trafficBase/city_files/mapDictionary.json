@@ -6,5 +6,9 @@
     "#" : "Obstacle",
     "v" : "Down",
     "^" : "Up",
-    "D" : "Destination"
-}
+    "D" : "Destination",
+    "%" : "Up_and_Left",
+    "&" : "Up_and_Right",
+    "_" : "Down_and_Left",
+    "=" : "Down_and_Right"
+} 
