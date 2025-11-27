@@ -65,7 +65,21 @@ class CityModel(Model):
                     elif col == "D":
                         agent = Destination(f"dest_{r}_{c}", self, cell)
                         self.destinations.append(agent)
-                        
+        
+        # Debug: Print traffic light locations
+        print("\n=== Traffic Light Locations ===")
+        for tl in self.traffic_lights:
+            x, y = tl.cell.coordinate
+            print(f"Traffic light at ({x}, {y})")
+        print(f"Total traffic lights: {len(self.traffic_lights)}\n")
+        
+        # Debug: Print destination locations
+        print("=== Destination Locations ===")
+        for dest in self.destinations:
+            x, y = dest.cell.coordinate
+            print(f"Destination at ({x}, {y})")
+        print(f"Total destinations: {len(self.destinations)}\n")
+        
         self.spawn_points = [
             (0, self.height - 1), # Top-left
             (self.width - 1, self.height - 1), # Top-right
