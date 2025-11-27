@@ -9,7 +9,7 @@ def agent_portrayal(agent):
 
     if agent is None:
         return
-
+ 
     portrayal = AgentPortrayalStyle(
         marker="s",
     )
@@ -25,6 +25,16 @@ def agent_portrayal(agent):
 
     if isinstance(agent, Obstacle):
         portrayal.color = "#555"
+    
+    if isinstance(agent, Car):
+        if agent.dying:
+            portrayal.color = "gray"
+        elif agent.waiting:
+            portrayal.color = "yellow"
+        elif agent.moving:
+            portrayal.color = "blue"
+        else:
+            portrayal.color = "black"
 
     return portrayal
 
@@ -34,7 +44,7 @@ def post_process(ax):
 
 
 model_params = {
-    "N": 5,
+    "N": 50,
     "seed": {
         "type": "InputText",
         "value": 42,
