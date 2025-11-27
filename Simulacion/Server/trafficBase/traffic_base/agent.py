@@ -130,7 +130,7 @@ class Car(CellAgent):
                 self.path = path[1:]  # Exclude starting position
                 self.current_step_in_path = 0
                 self.calculating = False
-                #print(f"Car {self.unique_id}: Path found with {len(self.path)} steps")
+                print(f"Car {self.unique_id}: Path found with {len(self.path)} steps")
                 return
             
             # Get valid neighbors based on road direction
@@ -152,179 +152,18 @@ class Car(CellAgent):
                     counter += 1
                     new_path = path + [neighbor]
                     heapq.heappush(open_set, (f_score, counter, neighbor, new_path))
-        
+        """
         # No path found - this destination is unreachable from this spawn point
         #print(f"Car {self.unique_id}: No path to destination (explored {len(visited)} cells)")
         if visited:
             closest = min(visited, key=lambda c: self.heuristic(c, goal))
-            #print(f"Car {self.unique_id}: Closest: ({closest.coordinate[0]}, {closest.coordinate[1]}) - distance: {self.heuristic(closest, goal)}")
+            print(f"Car {self.unique_id}: Closest: ({closest.coordinate[0]}, {closest.coordinate[1]}) - distance: {self.heuristic(closest, goal)}")
         
         # Assign a new reachable destination or remove the car
-        #print(f"Car {self.unique_id}: Destination unreachable, finding alternative...")
+        print(f"Car {self.unique_id}: Destination unreachable, finding alternative...")
+        """
         self.find_reachable_destination()
         self.calculating = False
-    
-    def find_reachable_destination(self):
-        """Finds a reachable destination for the car"""
-        # Get all destinations from model - Mesa 3 API
-        # In Mesa 3, we need to iterate through grid cells to find agents
-        all_destinations = []
-        for x in range(self.model.grid.width):
-            for y in range(self.model.grid.height):
-                cell = self.model.grid[(x, y)]
-                for agent in cell.agents:
-                    if isinstance(agent, Destination):
-                        all_destinations.append(agent)
-        
-        # Try each destination
-        for dest in all_destinations:
-            if self.can_reach_destination(dest.cell):
-                #print(f"Car {self.unique_id}: Found reachable destination at ({dest.cell.coordinate[0]}, {dest.cell.coordinate[1]})")
-                self.destination = dest.cell
-                self.calculate_route()
-                return
-        
-        # No reachable destination found
-        #print(f"Car {self.unique_id}: No reachable destination found, removing car")
-        self.die()
-    
-    def can_reach_destination(self, goal):
-        """Quick BFS check if destination is reachable"""
-        start = self.cell
-        visited = set()
-        queue = deque([start])
-        visited.add(start)
-        max_checks = 500
-        checks = 0
-        
-        while queue and checks < max_checks:
-            checks += 1
-            current = queue.popleft()
-            
-            if current == goal:
-                return True
-            
-            neighbors = self.get_valid_neighbors(current)
-            for neighbor in neighbors:
-                if neighbor not in visited:
-                    visited.add(neighbor)
-                    queue.append(neighbor)
-        
-        return False
-    
-    def get_valid_neighbors(self, cell):
-        """Gets valid neighboring cells based on road directions"""
-        neighbors = []
-        
-        # Find the road at current cell
-        road = None
-        for agent in cell.agents:
-            if isinstance(agent, Road):
-                road = agent
-                break
-        
-        # If at destination, can move in any direction
-        is_destination = any(isinstance(agent, Destination) for agent in cell.agents)
-        if is_destination:
-            # Return all adjacent cells
-            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-                new_x = cell.coordinate[0] + dx
-                new_y = cell.coordinate[1] + dy
-                if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
-                    next_cell = self.model.grid[(new_x, new_y)]
-                    if self.is_traversable(next_cell):
-                        neighbors.append(next_cell)
-            return neighbors
-        
-        if not road:
-            return neighbors
-        
-        # Extended direction map
-        direction_map = {
-            "Up": (0, 1),
-            "Down": (0, -1),
-            "Left": (-1, 0),
-            "Right": (1, 0),
-            "Up_and_Left": [(0, 1), (-1, 0)],
-            "Up_and_Right": [(0, 1), (1, 0)],
-            "Down_and_Left": [(0, -1), (-1, 0)],
-            "Down_and_Right": [(0, -1), (1, 0)]
-        }
-        
-        # Check all allowed directions for this road
-        for direction in road.directions:
-            moves = direction_map.get(direction, None)
-            
-            if moves is None:
-                continue
-            
-            # Handle both single direction and multi-direction moves
-            if isinstance(moves, list):
-                for dx, dy in moves:
-                    new_x = cell.coordinate[0] + dx
-                    new_y = cell.coordinate[1] + dy
-                    
-                    if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
-                        next_cell = self.model.grid[(new_x, new_y)]
-                        if self.is_traversable(next_cell):
-                            neighbors.append(next_cell)
-            else:
-                dx, dy = moves
-                new_x = cell.coordinate[0] + dx
-                new_y = cell.coordinate[1] + dy
-                
-                if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
-                    next_cell = self.model.grid[(new_x, new_y)]
-                    if self.is_traversable(next_cell):
-                        neighbors.append(next_cell)
-        
-        # CRITICAL FIX: Also check if ANY neighbor is a destination
-        # Destinations should be reachable from adjacent roads regardless of direction
-        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-            new_x = cell.coordinate[0] + dx
-            new_y = cell.coordinate[1] + dy
-            
-            if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
-                next_cell = self.model.grid[(new_x, new_y)]
-                # Check if this cell is a destination
-                is_dest = any(isinstance(agent, Destination) for agent in next_cell.agents)
-                if is_dest and next_cell not in neighbors:
-                    neighbors.append(next_cell)
-        
-        return neighbors
-    
-    def calculate_edge_cost(self, from_cell, to_cell):
-        """Calculates the cost to move from one cell to another"""
-        base_cost = 1.0
-        
-        # Penalize cells with traffic lights (especially red ones)
-        for agent in to_cell.agents:
-            if isinstance(agent, Traffic_Light):
-                if not agent.state:  # Red light
-                    base_cost += 5.0
-                else:  # Green light
-                    base_cost += 1.0
-        
-        # Penalize cells with other cars (traffic density)
-        car_count = sum(1 for agent in to_cell.agents if isinstance(agent, Car))
-        base_cost += car_count * 3.0
-        
-        # Check cars in neighboring cells (surrounding traffic)
-        surrounding_cars = 0
-        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-            nx = to_cell.coordinate[0] + dx
-            ny = to_cell.coordinate[1] + dy
-            if 0 <= nx < self.model.grid.width and 0 <= ny < self.model.grid.height:
-                neighbor_cell = self.model.grid[(nx, ny)]
-                surrounding_cars += sum(1 for agent in neighbor_cell.agents if isinstance(agent, Car))
-        
-        base_cost += surrounding_cars * 0.5
-        
-        return base_cost
-    
-    def heuristic(self, cell, goal):
-        """Manhattan distance heuristic"""
-        return abs(cell.coordinate[0] - goal.coordinate[0]) + abs(cell.coordinate[1] - goal.coordinate[1])
 
     def step(self):
         """ 
@@ -370,6 +209,200 @@ class Car(CellAgent):
     =====================================================================================================================0
     """
 
+    def heuristic(self, cell, goal):
+        """Manhattan distance heuristic"""
+        return abs(cell.coordinate[0] - goal.coordinate[0]) + abs(cell.coordinate[1] - goal.coordinate[1])
+
+    def find_reachable_destination(self):
+        """Finds a reachable destination for the car"""
+        # Get all destinations from model
+        all_destinations = []
+        for x in range(self.model.grid.width):
+            for y in range(self.model.grid.height):
+                cell = self.model.grid[(x, y)]
+                for agent in cell.agents:
+                    if isinstance(agent, Destination):
+                        all_destinations.append(agent)
+        
+        # Try each destination
+        for dest in all_destinations:
+            if self.can_reach_destination(dest.cell):
+                print(f"Car {self.unique_id}: Found reachable destination at ({dest.cell.coordinate[0]}, {dest.cell.coordinate[1]})")
+                self.destination = dest.cell
+                self.calculate_route()
+                return
+        
+        # No reachable destination found
+        print(f"Car {self.unique_id}: No reachable destination found, removing car")
+        self.die()
+    
+    def can_reach_destination(self, goal):
+        """Quick BFS check if destination is reachable"""
+        start = self.cell
+        visited = set()
+        queue = deque([start])
+        visited.add(start)
+        max_checks = 500
+        checks = 0
+        
+        while queue and checks < max_checks:
+            checks += 1
+            current = queue.popleft()
+            
+            if current == goal:
+                return True
+            
+            neighbors = self.get_valid_neighbors(current)
+            for neighbor in neighbors:
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        
+        return False
+    
+    def get_valid_neighbors(self, cell):
+        """Gets valid neighboring cells based on road directions"""
+        neighbors = []
+        
+        # Find the road and traffic light at current cell
+        road = None
+        traffic_light = None
+        for agent in cell.agents:
+            if isinstance(agent, Road):
+                road = agent
+            if isinstance(agent, Traffic_Light):
+                traffic_light = agent
+        
+        # If at destination, can move in any direction
+        is_destination = any(isinstance(agent, Destination) for agent in cell.agents)
+        if is_destination:
+            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                new_x = cell.coordinate[0] + dx
+                new_y = cell.coordinate[1] + dy
+                if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
+                    next_cell = self.model.grid[(new_x, new_y)]
+                    if self.is_traversable(next_cell):
+                        neighbors.append(next_cell)
+            return neighbors
+        
+        # If cell has a traffic light (with or without road), allow ALL 4 directions
+        if traffic_light:
+            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                new_x = cell.coordinate[0] + dx
+                new_y = cell.coordinate[1] + dy
+                
+                if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
+                    next_cell = self.model.grid[(new_x, new_y)]
+                    if self.is_traversable(next_cell):
+                        neighbors.append(next_cell)
+            return neighbors
+        
+        # If no road and no traffic light, allow movement to adjacent traffic lights/destinations
+        if not road:
+            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                new_x = cell.coordinate[0] + dx
+                new_y = cell.coordinate[1] + dy
+                
+                if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
+                    next_cell = self.model.grid[(new_x, new_y)]
+                    # Can move to traffic lights or destinations from non-road cells
+                    has_tl = any(isinstance(agent, Traffic_Light) for agent in next_cell.agents)
+                    has_dest = any(isinstance(agent, Destination) for agent in next_cell.agents)
+                    if (has_tl or has_dest) and self.is_traversable(next_cell):
+                        neighbors.append(next_cell)
+            return neighbors
+        
+        # Extended direction map
+        direction_map = {
+            "Up": (0, 1),
+            "Down": (0, -1),
+            "Left": (-1, 0),
+            "Right": (1, 0),
+            "Up_and_Left": [(0, 1), (-1, 0)],
+            "Up_and_Right": [(0, 1), (1, 0)],
+            "Down_and_Left": [(0, -1), (-1, 0)],
+            "Down_and_Right": [(0, -1), (1, 0)]
+        }
+        
+        # Check all allowed directions for this road
+        for direction in road.directions:
+            moves = direction_map.get(direction, None)
+            
+            if moves is None:
+                continue
+            
+            if isinstance(moves, list):
+                for dx, dy in moves:
+                    new_x = cell.coordinate[0] + dx
+                    new_y = cell.coordinate[1] + dy
+                    
+                    if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
+                        next_cell = self.model.grid[(new_x, new_y)]
+                        if self.is_traversable(next_cell):
+                            neighbors.append(next_cell)
+            else:
+                dx, dy = moves
+                new_x = cell.coordinate[0] + dx
+                new_y = cell.coordinate[1] + dy
+                
+                if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
+                    next_cell = self.model.grid[(new_x, new_y)]
+                    if self.is_traversable(next_cell):
+                        neighbors.append(next_cell)
+        
+        # Allow entry to adjacent traffic lights from any road
+        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            new_x = cell.coordinate[0] + dx
+            new_y = cell.coordinate[1] + dy
+            
+            if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
+                next_cell = self.model.grid[(new_x, new_y)]
+                has_traffic_light = any(isinstance(agent, Traffic_Light) for agent in next_cell.agents)
+                if has_traffic_light and self.is_traversable(next_cell) and next_cell not in neighbors:
+                    neighbors.append(next_cell)
+        
+        # Also check if ANY neighbor is a destination
+        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            new_x = cell.coordinate[0] + dx
+            new_y = cell.coordinate[1] + dy
+            
+            if 0 <= new_x < self.model.grid.width and 0 <= new_y < self.model.grid.height:
+                next_cell = self.model.grid[(new_x, new_y)]
+                is_dest = any(isinstance(agent, Destination) for agent in next_cell.agents)
+                if is_dest and next_cell not in neighbors:
+                    neighbors.append(next_cell)
+        
+        return neighbors
+    
+    def calculate_edge_cost(self, from_cell, to_cell):
+        """Calculates the cost to move from one cell to another"""
+        base_cost = 1.0
+        
+        # Penalize cells with traffic lights (especially red ones)
+        for agent in to_cell.agents:
+            if isinstance(agent, Traffic_Light):
+                if not agent.state:  # Red light
+                    base_cost += 5.0
+                else:  # Green light
+                    base_cost += 1.0
+        
+        # Penalize cells with other cars (traffic density)
+        car_count = sum(1 for agent in to_cell.agents if isinstance(agent, Car))
+        base_cost += car_count * 3.0
+        
+        # Check cars in neighboring cells (surrounding traffic)
+        surrounding_cars = 0
+        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            nx = to_cell.coordinate[0] + dx
+            ny = to_cell.coordinate[1] + dy
+            if 0 <= nx < self.model.grid.width and 0 <= ny < self.model.grid.height:
+                neighbor_cell = self.model.grid[(nx, ny)]
+                surrounding_cars += sum(1 for agent in neighbor_cell.agents if isinstance(agent, Car))
+        
+        base_cost += surrounding_cars * 0.5
+        
+        return base_cost
+
     def get_next_cell_in_direction(self):
         """Gets the next cell based on the current road direction"""
         road = None
@@ -403,7 +436,6 @@ class Car(CellAgent):
             return self.model.grid[(next_x, next_y)]
         return None
 
-    
     def is_traversable(self, cell):
         """Checks if a cell can be used in pathfinding (ignores temporary obstacles like cars)"""
         if not cell:
@@ -412,6 +444,11 @@ class Car(CellAgent):
         # Destinations are always traversable
         is_destination = any(isinstance(agent, Destination) for agent in cell.agents)
         if is_destination:
+            return True
+        
+        # CRITICAL FIX: Traffic light cells are ALWAYS traversable
+        has_traffic_light = any(isinstance(agent, Traffic_Light) for agent in cell.agents)
+        if has_traffic_light:
             return True
         
         has_road = False
