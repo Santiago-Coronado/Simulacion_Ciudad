@@ -41,6 +41,34 @@ const duration = 1000; // ms
 let elapsed = 0;
 let then = 0;
 
+// DICCIONARIO DE MODELOS DE EDIFICIOS
+// Cada edificio tiene una configuración con:
+// - path: ruta del archivo .obj
+// - mtl: ruta del archivo .mtl (materiales)
+// - scale: escala a aplicar al edificio (0.04 = pequeño, 0.1 = grande)
+// - offset: desplazamiento en Y para posicionar correctamente
+// Puedes agregar más edificios aquí y se elegirán al azar al generar el mapa
+const BUILDING_MODELS = {
+  untitled: {
+    path: '../assets/models/Untitled.obj',
+    mtl: '../assets/models/Untitled.mtl',
+    scale: 0.04,
+    offset: -1
+  },
+  building2: {
+    path: '../assets/models/building2.obj',
+    mtl: '../assets/models/building2.mtl',
+    scale: 0.03,
+    offset: -1
+  },
+  building3: {
+    path: '../assets/models/building3.obj',
+    mtl: '../assets/models/building3.mtl',
+    scale: 0.05,
+    offset: -1
+  }
+};
+
 
 // ============================================================
 // FUNCIÓN PARA CARGAR ARCHIVOS .OBJ GENÉRICOS
@@ -131,6 +159,24 @@ async function loadObjModel(objFilePath, mtlFilePath = null, modelName = "modelo
     }
 }
 
+// FUNCIÓN PARA ELEGIR UN EDIFICIO ALEATORIO
+// Selecciona un edificio al azar del diccionario cargado.
+// Esto permite que cada obstáculo tenga un edificio diferente.
+// Si no hay edificios cargados, devuelve null (usa fallback a cubos).
+function getRandomBuilding(loadedBuildingModels) {
+  const buildingKeys = Object.keys(loadedBuildingModels);
+  
+  if (buildingKeys.length === 0) {
+    return null;
+  }
+  
+  // Elegir uno aleatorio usando Math.random()
+  // Math.random() da un número entre 0 y 1
+  // Lo multiplicamos por la cantidad de edificios y redondeamos hacia abajo
+  const randomKey = buildingKeys[Math.floor(Math.random() * buildingKeys.length)];
+  return loadedBuildingModels[randomKey];
+}
+
 
 // Main function is async to be able to make the requests
 async function main() {
@@ -194,32 +240,29 @@ async function setupObjects(scene, gl, programInfo) {
   const baseCube = new Object3D(-1);
   baseCube.prepareVAO(gl, programInfo);
 
-  // CARGAR MODELO DE EDIFICIOS
-  // Intenta cargar un modelo OBJ complejo de edificios.
-  // Si falla, los obstáculos se dibujarán como cubos simples.
-  const buildingModel = await loadObjModel(
-    '../assets/models/Untitled.obj',
-    '../assets/models/Untitled.mtl',
-    'edificios'
-  );
+  // CARGAR TODOS LOS MODELOS DE EDIFICIOS DISPONIBLES
+  // Precargamos todos los edificios del diccionario para evitar cargarlos cada vez.
+  // Los guardamos en un objeto llamado loadedBuildingModels con su configuración.
+  // Esto permite que luego elijamos al azar cuál usar para cada obstáculo.
+  const loadedBuildingModels = {};
 
-  let buildingVAO = null;
-  let buildingBufferInfo = null;
-  let buildingArrays = null;
-
-  if (buildingModel) {
-    console.log('Creando VAO para modelo de edificios...');
-    buildingArrays = buildingModel;
+  for (const [buildingKey, buildingConfig] of Object.entries(BUILDING_MODELS)) {
+    console.log(`Cargando edificio: ${buildingKey}`);
+    const model = await loadObjModel(
+      buildingConfig.path,
+      buildingConfig.mtl,
+      buildingKey
+    );
     
-    try {
-      buildingBufferInfo = twgl.createBufferInfoFromArrays(gl, buildingModel);
-      buildingVAO = gl.createVertexArray();
-      gl.bindVertexArray(buildingVAO);
-      twgl.setBuffersAndAttributes(gl, programInfo, buildingBufferInfo);
-      console.log('VAO de edificios creado correctamente');
-    } catch (error) {
-      console.error('Error creando VAO de edificios:', error);
-      buildingVAO = null;
+    if (model) {
+      loadedBuildingModels[buildingKey] = {
+        arrays: model,
+        bufferInfo: twgl.createBufferInfoFromArrays(gl, model),
+        config: buildingConfig
+      };
+      console.log(`Modelo de edificio ${buildingKey} cargado correctamente`);
+    } else {
+      console.warn(`No se pudo cargar modelo ${buildingKey}, será fallback`);
     }
   }
 
@@ -292,23 +335,44 @@ async function setupObjects(scene, gl, programInfo) {
     scene.addObject(road);
   }
 
-  // Setup obstacles (buildings with OBJ model if available)
+  // SETUP OBSTACLES CON EDIFICIOS ALEATORIOS
+  // Por cada obstáculo, elige un edificio al azar del diccionario.
+  // Esto genera variabilidad visual: cada ejecución tendrá edificios diferentes en diferentes posiciones.
   for (const obstacle of obstacles) {
-    if (buildingVAO) {
-      // Usar modelo OBJ para los edificios
-      obstacle.arrays = buildingArrays;
-      obstacle.bufferInfo = buildingBufferInfo;
-      obstacle.vao = buildingVAO;
-      obstacle.scale = { x: 0.04, y: 0.04, z: 0.04 };
-      obstacle.positionOffset = { x: 0, y: -1, z: 0 };
+    // ELEGIR EDIFICIO ALEATORIO
+    const randomBuilding = getRandomBuilding(loadedBuildingModels);
+    
+    if (randomBuilding) {
+      // USAR EDIFICIO ALEATORIO
+      // Asignamos el modelo, bufferInfo y VAO del edificio elegido
+      obstacle.arrays = randomBuilding.arrays;
+      obstacle.bufferInfo = randomBuilding.bufferInfo;
+      obstacle.vao = randomBuilding.vao || gl.createVertexArray();
+      
+      // APLICAR ESCALA Y OFFSET DEL EDIFICIO ELEGIDO
+      // Cada edificio del diccionario tiene su propia escala y offset
+      // Esto asegura que se vea correctamente aunque tengan diferentes tamaños
+      const scale = randomBuilding.config.scale;
+      obstacle.scale = { x: scale, y: scale, z: scale };
+      obstacle.positionOffset = { x: 0, y: randomBuilding.config.offset, z: 0 };
+      
+      // PREPARAR VAO SI ES NECESARIO
+      // Si el VAO aún no existe, lo creamos y configuramos
+      if (!randomBuilding.vao) {
+        randomBuilding.vao = obstacle.vao;
+        gl.bindVertexArray(obstacle.vao);
+        twgl.setBuffersAndAttributes(gl, programInfo, randomBuilding.bufferInfo);
+      }
     } else {
-      // Fallback a cubos si no se cargó el modelo
+      // FALLBACK A CUBOS si no hay modelos cargados
+      // Si no pudimos cargar ningún edificio, usamos cubos como alternativa
       obstacle.arrays = baseCube.arrays;
       obstacle.bufferInfo = baseCube.bufferInfo;
       obstacle.vao = baseCube.vao;
       obstacle.scale = { x: 1, y: 3, z: 1 };
       obstacle.positionOffset = { x: 0, y: 0, z: 0 };
     }
+    
     obstacle.color = [0.5, 0.5, 0.5, 1.0];
     obstacle.shininess = 16;
     scene.addObject(obstacle);
@@ -343,7 +407,7 @@ async function setupObjects(scene, gl, programInfo) {
     
     trafficLight.shininess = 128;
     trafficLight.isLight = true;
-    trafficLight.lightRange = 10.0;
+    trafficLight.lightRange = 2.0;
     
     updateTrafficLightColor(trafficLight);
     scene.addObject(trafficLight);
