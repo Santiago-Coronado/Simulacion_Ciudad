@@ -18,6 +18,8 @@ app = Flask("Traffic example")
 cors = CORS(app, origins=['http://localhost'])
 
 # This route will be used to send the parameters of the simulation to the server.
+# THIS IS JUST THE MODIFIED FUNCTION - Replace it in your flask_traffic_server.py
+
 @app.route('/init', methods=['GET', 'POST'])
 @cross_origin()
 def initModel():
@@ -39,6 +41,12 @@ def initModel():
 
     width = cityModel.width
     height = cityModel.height
+
+    # GENERAR AGENTES INICIALES
+    # Llamar a spawn_car() para que genere los agentes en las esquinas
+    print("Generando agentes iniciales...")
+    cityModel.spawn_car()
+    print(f"Agentes generados: {len([a for a in cityModel.agents if isinstance(a, Car)])}")
 
     # Return a message to saying that the model was created successfully
     return jsonify({"message": f"Parameters recieved, model initiated.\nSize: {width}x{height}"})
@@ -186,13 +194,15 @@ def getRoads():
                 if isinstance(agent, Road)
             ]
 
+            # FIX: Usar 'directions' (plural) en lugar de 'direction' (singular)
+            # Porque la clase Road en agent.py usa 'self.directions' como una lista
             roadPositions = [
                 {
                     "id": str(a.unique_id), 
                     "x": coordinate[0], 
                     "y": 0, 
                     "z": coordinate[1],
-                    "direction": a.direction
+                    "direction": a.directions[0] if a.directions else "Left"  # ← CAMBIO AQUÍ
                 }
                 for (coordinate, a) in roads
             ]

@@ -4,7 +4,7 @@
  * Gilberto Echeverria
  * 2025-11-08
  */
- 
+
 
 'use strict';
 
@@ -21,9 +21,10 @@ const destinations = [];
 const roads = [];
 
 // Define the data object
-// Parameters equal to randommodel class in other examples
 const initData = {
-    NAgents: 200
+    NAgents: 20,
+    width: 50,
+    height: 50
 };
 
 
@@ -67,9 +68,6 @@ async function getAgents() {
             // Parse the response as JSON
             let result = await response.json();
 
-            // Log the agent positions
-            //console.log("getAgents positions: ", result.positions)
-
             // Check if the agents array is empty
             if (agents.length == 0) {
                 // Create new agents and add them to the agents array
@@ -79,9 +77,6 @@ async function getAgents() {
                     newAgent['oldPosArray'] = newAgent.posArray;
                     agents.push(newAgent);
                 }
-                // Log the agents array
-                //console.log("Agents:", agents);
-
             } else {
                 // Update the positions of existing agents
                 for (const agent of result.positions) {
@@ -93,9 +88,6 @@ async function getAgents() {
                         current_agent.oldPosArray = current_agent.posArray;
                         current_agent.position = {x: agent.x, y: agent.y, z: agent.z};
                     }
-
-                    //console.log("OLD: ", current_agent.oldPosArray,
-                    //            " NEW: ", current_agent.posArray);
                 }
             }
         }
@@ -124,8 +116,6 @@ async function getObstacles() {
                 const newObstacle = new Object3D(obstacle.id, [obstacle.x, obstacle.y, obstacle.z]);
                 obstacles.push(newObstacle);
             }
-            // Log the obstacles array
-            //console.log("Obstacles:", obstacles);
         }
 
     } catch (error) {
@@ -134,65 +124,83 @@ async function getObstacles() {
     }
 }
 
+/*
+ * Retrieves the current positions and states of traffic lights from the agent server.
+ */
 async function getTrafficLights() {
     try {
+        // Send a GET request to the agent server to retrieve the traffic light positions
         let response = await fetch(agent_server_uri + "getTrafficLights");
 
+        // Check if the response was successful
         if (response.ok) {
+            // Parse the response as JSON
             let result = await response.json();
 
-            if (trafficLights.length == 0) {
-                for (const light of result.positions) {
-                    const newLight = new Object3D(light.id, [light.x, light.y, light.z]);
-                    newLight.state = light.state;
-                    newLight.timeToChange = light.timeToChange;
-                    trafficLights.push(newLight);
-                }
-            } else {
-                for (const light of result.positions) {
-                    const current_light = trafficLights.find((object3d) => object3d.id == light.id);
-                    if(current_light != undefined){
-                        current_light.state = light.state;
-                    }
-                }
+            // Create new traffic lights and add them to the trafficLights array
+            for (const trafficLight of result.positions) {
+                const newTrafficLight = new Object3D(trafficLight.id, [trafficLight.x, trafficLight.y, trafficLight.z]);
+                newTrafficLight.state = trafficLight.state;
+                newTrafficLight.timeToChange = trafficLight.timeToChange;
+                trafficLights.push(newTrafficLight);
             }
         }
+
     } catch (error) {
+        // Log any errors that occur during the request
         console.log(error);
     }
 }
 
+/*
+ * Retrieves the current positions of all destinations from the agent server.
+ */
 async function getDestinations() {
     try {
+        // Send a GET request to the agent server to retrieve the destination positions
         let response = await fetch(agent_server_uri + "getDestinations");
 
+        // Check if the response was successful
         if (response.ok) {
+            // Parse the response as JSON
             let result = await response.json();
 
-            for (const dest of result.positions) {
-                const newDest = new Object3D(dest.id, [dest.x, dest.y, dest.z]);
-                destinations.push(newDest);
+            // Create new destinations and add them to the destinations array
+            for (const destination of result.positions) {
+                const newDestination = new Object3D(destination.id, [destination.x, destination.y, destination.z]);
+                destinations.push(newDestination);
             }
         }
+
     } catch (error) {
+        // Log any errors that occur during the request
         console.log(error);
     }
 }
 
+/*
+ * Retrieves the current positions and directions of roads from the agent server.
+ */
 async function getRoads() {
     try {
+        // Send a GET request to the agent server to retrieve the road positions
         let response = await fetch(agent_server_uri + "getRoads");
 
+        // Check if the response was successful
         if (response.ok) {
+            // Parse the response as JSON
             let result = await response.json();
 
+            // Create new roads and add them to the roads array
             for (const road of result.positions) {
                 const newRoad = new Object3D(road.id, [road.x, road.y, road.z]);
                 newRoad.direction = road.direction;
                 roads.push(newRoad);
             }
         }
+
     } catch (error) {
+        // Log any errors that occur during the request
         console.log(error);
     }
 }
@@ -209,8 +217,6 @@ async function update() {
         if (response.ok) {
             // Retrieve the updated agent positions
             await getAgents();
-            // Log a message indicating that the agents have been updated
-            //console.log("Updated agents");
         }
 
     } catch (error) {
@@ -219,4 +225,7 @@ async function update() {
     }
 }
 
-export { agents, obstacles, roads, trafficLights, destinations, initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getDestinations, getRoads };
+export { 
+    agents, obstacles, trafficLights, destinations, roads,
+    initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getDestinations, getRoads 
+};

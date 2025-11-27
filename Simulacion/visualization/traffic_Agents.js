@@ -7,7 +7,6 @@
  * 2025-11-08
  */
 
- 
 'use strict';
 
 import * as twgl from 'twgl-base.js';
@@ -19,8 +18,6 @@ import { Light3D } from '../libs/light3d.js';
 import { Camera3D } from '../libs/camera3d.js';
 
 // CARGADOR DE MODELOS OBJ/MTL
-// Importamos las funciones para cargar modelos 3D en formato Wavefront OBJ
-// Esto nos permite usar modelos complejos como edificios, semáforos y esferas
 import { loadObj, loadMtl } from '../libs/obj_loader.js';
 import {
   agents, obstacles, trafficLights, destinations, roads,
@@ -42,12 +39,6 @@ let elapsed = 0;
 let then = 0;
 
 // DICCIONARIO DE MODELOS DE EDIFICIOS
-// Cada edificio tiene una configuración con:
-// - path: ruta del archivo .obj
-// - mtl: ruta del archivo .mtl (materiales)
-// - scale: escala a aplicar al edificio (0.04 = pequeño, 0.1 = grande)
-// - offset: desplazamiento en Y para posicionar correctamente
-// Puedes agregar más edificios aquí y se elegirán al azar al generar el mapa
 const BUILDING_MODELS = {
   untitled: {
     path: '../assets/models/Untitled.obj',
@@ -69,12 +60,8 @@ const BUILDING_MODELS = {
   }
 };
 
-
 // ============================================================
 // FUNCIÓN PARA CARGAR ARCHIVOS .OBJ GENÉRICOS
-// Carga modelos 3D en formato OBJ junto con sus materiales MTL.
-// Si todo va bien, centra el modelo automáticamente.
-// Si falla, devuelve null para que use fallback (cubos).
 // ============================================================
 async function loadObjModel(objFilePath, mtlFilePath = null, modelName = "modelo") {
     try {
@@ -160,9 +147,6 @@ async function loadObjModel(objFilePath, mtlFilePath = null, modelName = "modelo
 }
 
 // FUNCIÓN PARA ELEGIR UN EDIFICIO ALEATORIO
-// Selecciona un edificio al azar del diccionario cargado.
-// Esto permite que cada obstáculo tenga un edificio diferente.
-// Si no hay edificios cargados, devuelve null (usa fallback a cubos).
 function getRandomBuilding(loadedBuildingModels) {
   const buildingKeys = Object.keys(loadedBuildingModels);
   
@@ -170,13 +154,9 @@ function getRandomBuilding(loadedBuildingModels) {
     return null;
   }
   
-  // Elegir uno aleatorio usando Math.random()
-  // Math.random() da un número entre 0 y 1
-  // Lo multiplicamos por la cantidad de edificios y redondeamos hacia abajo
   const randomKey = buildingKeys[Math.floor(Math.random() * buildingKeys.length)];
   return loadedBuildingModels[randomKey];
 }
-
 
 // Main function is async to be able to make the requests
 async function main() {
@@ -189,15 +169,32 @@ async function main() {
   // Prepare the program with the shaders
   phongProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
 
+  console.log('=== INICIANDO SIMULACIÓN ===');
+
   // Initialize the agents model
+  console.log('Inicializando modelo...');
   await initAgentsModel();
 
   // Get all elements from the model
+  console.log('Obteniendo agentes...');
   await getAgents();
+  console.log('Agentes obtenidos:', agents.length);
+
+  console.log('Obteniendo obstáculos...');
   await getObstacles();
+  console.log('Obstáculos obtenidos:', obstacles.length);
+
+  console.log('Obteniendo semáforos...');
   await getTrafficLights();
+  console.log('Semáforos obtenidos:', trafficLights.length);
+
+  console.log('Obteniendo destinos...');
   await getDestinations();
+  console.log('Destinos obtenidos:', destinations.length);
+
+  console.log('Obteniendo carreteras...');
   await getRoads();
+  console.log('Carreteras obtenidas:', roads.length);
 
   // Initialize the scene
   setupScene();
@@ -205,14 +202,9 @@ async function main() {
   // Position the objects in the scene
   await setupObjects(scene, gl, phongProgramInfo);
 
-  // Prepare the user interface
-  setupUI();
-
   // First call to the drawing loop
   drawScene();
 }
-
-
 
 function setupScene() {
   let camera = new Camera3D(0,
@@ -226,8 +218,6 @@ function setupScene() {
   scene.camera.setupControls();
 
   // LUZ PRINCIPAL DE LA ESCENA (PHONG)
-  // Luz blanca general que ilumina toda la escena.
-  // Se usa como iluminación base junto con las luces de los semáforos.
   let mainLight = new Light3D(0, [20, 20, 20],           // Position
                              [0.6, 0.6, 0.6, 1.0],   // Ambient
                              [1.2, 1.2, 1.2, 1.0],   // Diffuse
@@ -236,14 +226,13 @@ function setupScene() {
 }
 
 async function setupObjects(scene, gl, programInfo) {
+  console.log('=== SETUP OBJECTS INICIADO ===');
+  
   // Create VAOs for the different shapes
   const baseCube = new Object3D(-1);
   baseCube.prepareVAO(gl, programInfo);
 
   // CARGAR TODOS LOS MODELOS DE EDIFICIOS DISPONIBLES
-  // Precargamos todos los edificios del diccionario para evitar cargarlos cada vez.
-  // Los guardamos en un objeto llamado loadedBuildingModels con su configuración.
-  // Esto permite que luego elijamos al azar cuál usar para cada obstáculo.
   const loadedBuildingModels = {};
 
   for (const [buildingKey, buildingConfig] of Object.entries(BUILDING_MODELS)) {
@@ -267,8 +256,6 @@ async function setupObjects(scene, gl, programInfo) {
   }
 
   // CARGAR MODELO DE SEMÁFOROS
-  // Intenta cargar un modelo OBJ de semáforos.
-  // Si falla, se dibujan como cubos pequeños.
   const trafficLightModel = await loadObjModel(
     '../assets/models/tl.obj',
     '../assets/models/tl.mtl',
@@ -296,8 +283,6 @@ async function setupObjects(scene, gl, programInfo) {
   }
 
   // CARGAR MODELO DE ESFERA INDICADORA
-  // Carga una esfera que se usa como indicador visual del semáforo.
-  // Esta esfera es la que brilla y emite luz (es emisiva).
   const sphereModel = await loadObjModel(
     '../assets/models/sphere.obj',
     '../assets/models/sphere.mtl',
@@ -325,6 +310,7 @@ async function setupObjects(scene, gl, programInfo) {
   }
 
   // Setup roads (ground level)
+  console.log('Configurando carreteras:', roads.length);
   for (const road of roads) {
     road.arrays = baseCube.arrays;
     road.bufferInfo = baseCube.bufferInfo;
@@ -336,36 +322,25 @@ async function setupObjects(scene, gl, programInfo) {
   }
 
   // SETUP OBSTACLES CON EDIFICIOS ALEATORIOS
-  // Por cada obstáculo, elige un edificio al azar del diccionario.
-  // Esto genera variabilidad visual: cada ejecución tendrá edificios diferentes en diferentes posiciones.
+  console.log('Configurando obstáculos:', obstacles.length);
   for (const obstacle of obstacles) {
-    // ELEGIR EDIFICIO ALEATORIO
     const randomBuilding = getRandomBuilding(loadedBuildingModels);
     
     if (randomBuilding) {
-      // USAR EDIFICIO ALEATORIO
-      // Asignamos el modelo, bufferInfo y VAO del edificio elegido
       obstacle.arrays = randomBuilding.arrays;
       obstacle.bufferInfo = randomBuilding.bufferInfo;
       obstacle.vao = randomBuilding.vao || gl.createVertexArray();
       
-      // APLICAR ESCALA Y OFFSET DEL EDIFICIO ELEGIDO
-      // Cada edificio del diccionario tiene su propia escala y offset
-      // Esto asegura que se vea correctamente aunque tengan diferentes tamaños
       const scale = randomBuilding.config.scale;
       obstacle.scale = { x: scale, y: scale, z: scale };
       obstacle.positionOffset = { x: 0, y: randomBuilding.config.offset, z: 0 };
       
-      // PREPARAR VAO SI ES NECESARIO
-      // Si el VAO aún no existe, lo creamos y configuramos
       if (!randomBuilding.vao) {
         randomBuilding.vao = obstacle.vao;
         gl.bindVertexArray(obstacle.vao);
         twgl.setBuffersAndAttributes(gl, programInfo, randomBuilding.bufferInfo);
       }
     } else {
-      // FALLBACK A CUBOS si no hay modelos cargados
-      // Si no pudimos cargar ningún edificio, usamos cubos como alternativa
       obstacle.arrays = baseCube.arrays;
       obstacle.bufferInfo = baseCube.bufferInfo;
       obstacle.vao = baseCube.vao;
@@ -379,6 +354,7 @@ async function setupObjects(scene, gl, programInfo) {
   }
 
   // Setup destinations
+  console.log('Configurando destinos:', destinations.length);
   for (const destination of destinations) {
     destination.arrays = baseCube.arrays;
     destination.bufferInfo = baseCube.bufferInfo;
@@ -390,15 +366,14 @@ async function setupObjects(scene, gl, programInfo) {
   }
 
   // Setup traffic lights
+  console.log('Configurando semáforos:', trafficLights.length);
   for (const trafficLight of trafficLights) {
     if (trafficLightVAO) {
-      // Usar modelo OBJ para los semáforos
       trafficLight.arrays = trafficLightArrays;
       trafficLight.bufferInfo = trafficLightBufferInfo;
       trafficLight.vao = trafficLightVAO;
       trafficLight.scale = { x: 1.5, y: 1.5, z: 1.5 };
     } else {
-      // Fallback a cubos si no se cargó el modelo
       trafficLight.arrays = baseCube.arrays;
       trafficLight.bufferInfo = baseCube.bufferInfo;
       trafficLight.vao = baseCube.vao;
@@ -414,11 +389,7 @@ async function setupObjects(scene, gl, programInfo) {
   }
 
   // CREAR ESFERAS EMISIVAS PARA LOS SEMÁFOROS
-  // Por cada semáforo, crea una pequeña esfera que:
-  // 1. Se posiciona arriba del semáforo (offset Y = 0.29)
-  // 2. Emite luz (isEmissive = true)
-  // 3. Cambia de color según el estado del semáforo
-  // 4. Se guarda como referencia para actualizarla en cada frame
+  console.log('Creando esferas para semáforos');
   for (const trafficLight of trafficLights) {
     if (sphereVAO) {
       const sphere = new Object3D(trafficLight.id + "_sphere", trafficLight.posArray);
@@ -427,39 +398,41 @@ async function setupObjects(scene, gl, programInfo) {
       sphere.vao = sphereVAO;
       sphere.scale = { x: 0.08, y: 0.08, z: 0.08 };
       
-      // Offset para posicionar la esfera ARRIBA del semáforo
       sphere.positionOffset = { x: 0, y: 0.29, z: 0 };
       
-      // La esfera es EMISIVA (emite luz)
       sphere.isEmissive = true;
       
-      // Color según el estado del semáforo
       if (trafficLight.state === true) {
-        sphere.color = [0.0, 1.0, 0.0, 1.0];  // Verde
-        sphere.emissiveColor = [0.0, 1.0, 0.0];  // Verde intenso
+        sphere.color = [0.0, 1.0, 0.0, 1.0];
+        sphere.emissiveColor = [0.0, 1.0, 0.0];
       } else {
-        sphere.color = [1.0, 0.0, 0.0, 1.0];  // Rojo
-        sphere.emissiveColor = [1.0, 0.0, 0.0];  // Rojo intenso
+        sphere.color = [1.0, 0.0, 0.0, 1.0];
+        sphere.emissiveColor = [1.0, 0.0, 0.0];
       }
       
-      sphere.shininess = 2500;  // Muy brillante
+      sphere.shininess = 2500;
       scene.addObject(sphere);
       
-      // Guardar referencia a la esfera en el semáforo para actualizarla luego
       trafficLight.sphere = sphere;
     }
   }
 
-  // Setup cars (agents)
+  // Setup cars/motos (agents) - CUBOS SIMPLES PARA DEBUG
+  console.log('Configurando agentes:', agents.length);
   for (const agent of agents) {
     agent.arrays = baseCube.arrays;
     agent.bufferInfo = baseCube.bufferInfo;
     agent.vao = baseCube.vao;
     agent.scale = { x: 0.5, y: 0.5, z: 0.5 };
-    agent.color = [1.0, 0.0, 0.0, 1.0]; // Red for cars
+    agent.color = [1.0, 0.0, 0.0, 1.0]; // Red for agents
     agent.shininess = 32;
     scene.addObject(agent);
+    console.log(`  Agente ${agent.id} en posición:`, agent.posArray);
   }
+  console.log('Agentes configurados');
+
+  console.log('=== SETUP OBJECTS COMPLETADO ===');
+  console.log('Total objetos en escena:', scene.objects.length);
 }
 
 // Update traffic light color based on state
@@ -470,29 +443,21 @@ function updateTrafficLightColor(trafficLight) {
     trafficLight.color = [1.0, 0.0, 0.0, 1.0]; // Red
   }
   
-  // ACTUALIZAR COLOR EMISIVO DE LA ESFERA
-  // Cuando el estado del semáforo cambia, también actualiza el color
-  // de la esfera para que emita el color correcto (verde o rojo).
   if (trafficLight.sphere) {
     if (trafficLight.state === true) {
-      trafficLight.sphere.color = [0.0, 1.0, 0.0, 1.0];  // Verde
-      trafficLight.sphere.emissiveColor = [0.0, 1.0, 0.0];  // Verde intenso
+      trafficLight.sphere.color = [0.0, 1.0, 0.0, 1.0];
+      trafficLight.sphere.emissiveColor = [0.0, 1.0, 0.0];
     } else {
-      trafficLight.sphere.color = [1.0, 0.0, 0.0, 1.0];  // Rojo
-      trafficLight.sphere.emissiveColor = [1.0, 0.0, 0.0];  // Rojo intenso
+      trafficLight.sphere.color = [1.0, 0.0, 0.0, 1.0];
+      trafficLight.sphere.emissiveColor = [1.0, 0.0, 0.0];
     }
   }
 }
 
 // Draw an object with its corresponding transformations
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
-  // Prepare the vector for translation and scale
   let v3_tra = object.posArray;
   
-  // APLICAR OFFSET DE POSICIÓN
-  // Si el objeto tiene un desplazamiento (como las esferas de los semáforos),
-  // se suma a la posición base para obtener la posición final.
-  // Esto permite que la esfera se dibuje arriba del semáforo sin cambiar su pos original.
   if (object.positionOffset) {
     v3_tra = [
       v3_tra[0] + object.positionOffset.x,
@@ -536,9 +501,6 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     u_diffuseColor: object.color,
     u_specularColor: object.color,
     u_shininess: object.shininess,
-    // UNIFORMS PARA OBJETOS EMISIVOS
-    // u_isEmissive: indica al shader si este objeto emite luz (1.0) o no (0.0)
-    // u_emissiveColor: el color RGB de la luz que emite
     u_isEmissive: object.isEmissive ? 1.0 : 0.0,
     u_emissiveColor: object.emissiveColor || [0.0, 0.0, 0.0],
   }
@@ -572,9 +534,6 @@ async function drawScene() {
   gl.useProgram(phongProgramInfo.program);
   
   // PREPARAR POSICIONES Y COLORES DE LAS LUCES DE LOS SEMÁFOROS
-  // Calcula la posición ACTUAL de cada esfera (con offset) y su color.
-  // Esto se envía al shader para que ilumine los objetos cercanos.
-  // La distancia entre la luz y cada objeto se calcula en el shader usando Pitágoras.
   let trafficLightPositions = [];
   let trafficLightColors = [];
   let trafficLightRanges = [];
@@ -582,7 +541,6 @@ async function drawScene() {
   for (let i = 0; i < trafficLights.length && i < 27; i++) {
     const tl = trafficLights[i];
     
-    // Calcular la posición ACTUAL de la esfera (con offset)
     let spherePosition = [
       tl.posArray[0] + (tl.sphere ? (tl.sphere.positionOffset?.x || 0) : 0),
       tl.posArray[1] + (tl.sphere ? (tl.sphere.positionOffset?.y || 0) : 0),
@@ -591,16 +549,14 @@ async function drawScene() {
     
     trafficLightPositions.push(...spherePosition);
     
-    // Color del semáforo (según su estado)
     let tlColor;
     if (tl.state === true) {
-      tlColor = [0.0, 1.0, 0.0];  // Verde
+      tlColor = [0.0, 1.0, 0.0];
     } else {
-      tlColor = [1.0, 0.0, 0.0];  // Rojo
+      tlColor = [1.0, 0.0, 0.0];
     }
     trafficLightColors.push(...tlColor);
     
-    // Rango de influencia (distancia máxima de la luz)
     trafficLightRanges.push(tl.lightRange || 10.0);
   }
 
@@ -612,7 +568,6 @@ async function drawScene() {
     u_diffuseLight: scene.lights[0].diffuse,
     u_specularLight: scene.lights[0].specular,
     
-    // Uniforms de semáforos (ahora desde las esferas)
     u_trafficLightPositions: trafficLightPositions,
     u_trafficLightColors: trafficLightColors,
     u_trafficLightRange: trafficLightRanges,
@@ -628,7 +583,9 @@ async function drawScene() {
   // Update the scene after the elapsed duration
   if (elapsed >= duration) {
     elapsed = 0;
+    console.log('Actualizando simulación...');
     await update();
+    console.log('Agentes después de update:', agents.length);
     
     // Update traffic light colors based on their current state
     for (const trafficLight of trafficLights) {
@@ -656,11 +613,6 @@ function setupViewProjection(gl) {
   const viewProjectionMatrix = M4.multiply(projectionMatrix, viewMatrix);
 
   return viewProjectionMatrix;
-}
-
-// Setup a ui.
-function setupUI() {
-  // UI setup can be added here if needed
 }
 
 main();
