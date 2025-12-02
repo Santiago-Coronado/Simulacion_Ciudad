@@ -5,7 +5,6 @@
  * 2025-11-08
  */
 
-
 'use strict';
 
 import { Object3D } from '../libs/object3d';
@@ -16,17 +15,16 @@ const agent_server_uri = "http://localhost:8585/";
 // Initialize arrays to store agents and obstacles
 const agents = [];
 const obstacles = [];
+// Arrays para elementos adicionales del mapa
 const trafficLights = [];
 const destinations = [];
 const roads = [];
 
 // Define the data object
+// Parameters equal to randommodel class in other examples
 const initData = {
-    NAgents: 20,
-    width: 50,
-    height: 50
+    NAgents: 200
 };
-
 
 /* FUNCTIONS FOR THE INTERACTION WITH THE MESA SERVER */
 
@@ -68,26 +66,31 @@ async function getAgents() {
             // Parse the response as JSON
             let result = await response.json();
 
-            // Check if the agents array is empty
-            if (agents.length == 0) {
-                // Create new agents and add them to the agents array
-                for (const agent of result.positions) {
+            // Sincronización inteligente: detectar agentes eliminados en el servidor
+            const serverAgentIds = new Set(result.positions.map(a => a.id));
+            
+            // Remover agentes que ya no existen
+            for (let i = agents.length - 1; i >= 0; i--) {
+                if (!serverAgentIds.has(agents[i].id)) {
+                    agents.splice(i, 1);
+                }
+            }
+
+            // Create new agents or update existing ones
+            for (const agent of result.positions) {
+                const current_agent = agents.find((object3d) => object3d.id == agent.id);
+
+                if (current_agent === undefined) {
+                    // Crear agente nuevo
                     const newAgent = new Object3D(agent.id, [agent.x, agent.y, agent.z]);
                     // Store the initial position
-                    newAgent['oldPosArray'] = newAgent.posArray;
+                    newAgent['oldPosArray'] = [...newAgent.posArray];
                     agents.push(newAgent);
-                }
-            } else {
-                // Update the positions of existing agents
-                for (const agent of result.positions) {
-                    const current_agent = agents.find((object3d) => object3d.id == agent.id);
-
-                    // Check if the agent exists in the agents array
-                    if(current_agent != undefined){
-                        // Update the agent's position
-                        current_agent.oldPosArray = current_agent.posArray;
-                        current_agent.position = {x: agent.x, y: agent.y, z: agent.z};
-                    }
+                } else {
+                    // Usar setPosition() en lugar de acceso directo a .position
+                    // Update the agent's position
+                    current_agent.oldPosArray = [...current_agent.posArray];
+                    current_agent.setPosition([agent.x, agent.y, agent.z]);
                 }
             }
         }
@@ -124,83 +127,107 @@ async function getObstacles() {
     }
 }
 
-/*
- * Retrieves the current positions and states of traffic lights from the agent server.
- */
+// ============================================================
+// OBTENCIÓN INICIAL DE SEMÁFOROS
+// DESCRIPCIÓN: Solicita al servidor los semáforos y sus estados
+// Se llama una sola vez durante la inicialización
+// ============================================================
 async function getTrafficLights() {
     try {
-        // Send a GET request to the agent server to retrieve the traffic light positions
         let response = await fetch(agent_server_uri + "getTrafficLights");
 
-        // Check if the response was successful
         if (response.ok) {
-            // Parse the response as JSON
             let result = await response.json();
 
-            // Create new traffic lights and add them to the trafficLights array
-            for (const trafficLight of result.positions) {
-                const newTrafficLight = new Object3D(trafficLight.id, [trafficLight.x, trafficLight.y, trafficLight.z]);
-                newTrafficLight.state = trafficLight.state;
-                newTrafficLight.timeToChange = trafficLight.timeToChange;
-                trafficLights.push(newTrafficLight);
+            // Crear objeto 3D para cada semáforo
+            for (const light of result.positions) {
+                const newLight = new Object3D(light.id, [light.x, light.y, light.z]);
+                // Guardar estado (true=verde, false=rojo)
+                newLight.state = light.state;
+                // Guardar intervalo de cambio
+                newLight.timeToChange = light.timeToChange;
+                trafficLights.push(newLight);
             }
         }
-
     } catch (error) {
-        // Log any errors that occur during the request
         console.log(error);
     }
 }
 
-/*
- * Retrieves the current positions of all destinations from the agent server.
- */
+// ============================================================
+// ACTUALIZACIÓN DE ESTADOS DE SEMÁFOROS
+// DESCRIPCIÓN: Sincroniza los estados de los semáforos con el servidor
+// Se llama cada ciclo de simulación para actualizar colores dinámicamente
+// ============================================================
+async function updateTrafficLights() {
+    try {
+        let response = await fetch(agent_server_uri + "getTrafficLights");
+
+        if (response.ok) {
+            let result = await response.json();
+            // Crear mapa para búsqueda rápida
+            const serverTrafficLights = new Map(result.positions.map(tl => [tl.id, tl]));
+
+            // Actualizar estados locales con datos del servidor
+            for (const trafficLight of trafficLights) {
+                const serverData = serverTrafficLights.get(trafficLight.id);
+                if (serverData) {
+                    // Actualizar estado del semáforo
+                    trafficLight.state = serverData.state;
+                    // Actualizar intervalo de cambio
+                    trafficLight.timeToChange = serverData.timeToChange;
+                }
+            }
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+// ============================================================
+// OBTENCIÓN DE DESTINOS
+// DESCRIPCIÓN: Solicita al servidor la ubicación de todos los destinos
+// Se llama una sola vez durante la inicialización
+// ============================================================
 async function getDestinations() {
     try {
-        // Send a GET request to the agent server to retrieve the destination positions
         let response = await fetch(agent_server_uri + "getDestinations");
 
-        // Check if the response was successful
         if (response.ok) {
-            // Parse the response as JSON
             let result = await response.json();
 
-            // Create new destinations and add them to the destinations array
-            for (const destination of result.positions) {
-                const newDestination = new Object3D(destination.id, [destination.x, destination.y, destination.z]);
-                destinations.push(newDestination);
+            // Crear objeto 3D para cada destino
+            for (const dest of result.positions) {
+                const newDest = new Object3D(dest.id, [dest.x, dest.y, dest.z]);
+                destinations.push(newDest);
             }
         }
-
     } catch (error) {
-        // Log any errors that occur during the request
         console.log(error);
     }
 }
 
-/*
- * Retrieves the current positions and directions of roads from the agent server.
- */
+// ============================================================
+// OBTENCIÓN DE CARRETERAS
+// DESCRIPCIÓN: Solicita al servidor las carreteras y sus direcciones
+// Se llama una sola vez durante la inicialización
+// ============================================================
 async function getRoads() {
     try {
-        // Send a GET request to the agent server to retrieve the road positions
         let response = await fetch(agent_server_uri + "getRoads");
 
-        // Check if the response was successful
         if (response.ok) {
-            // Parse the response as JSON
             let result = await response.json();
 
-            // Create new roads and add them to the roads array
+            // Crear objeto 3D para cada carretera
             for (const road of result.positions) {
                 const newRoad = new Object3D(road.id, [road.x, road.y, road.z]);
+                // Guardar dirección permitida en esa carretera
                 newRoad.direction = road.direction;
                 roads.push(newRoad);
             }
         }
-
     } catch (error) {
-        // Log any errors that occur during the request
         console.log(error);
     }
 }
@@ -217,6 +244,8 @@ async function update() {
         if (response.ok) {
             // Retrieve the updated agent positions
             await getAgents();
+            // Sincronizar estados de semáforos en cada actualización
+            await updateTrafficLights();
         }
 
     } catch (error) {
@@ -225,7 +254,6 @@ async function update() {
     }
 }
 
-export { 
-    agents, obstacles, trafficLights, destinations, roads,
-    initAgentsModel, update, getAgents, getObstacles, getTrafficLights, getDestinations, getRoads 
-};
+export { agents, obstacles, roads, trafficLights, destinations, 
+    initAgentsModel, update, getAgents, getObstacles, getTrafficLights, 
+    getDestinations, getRoads, updateTrafficLights };
