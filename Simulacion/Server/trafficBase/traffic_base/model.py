@@ -66,6 +66,7 @@ class CityModel(Model):
                         agent = Destination(f"dest_{r}_{c}", self, cell)
                         self.destinations.append(agent)
         
+        """
         # Debug: Print traffic light locations
         print("\n=== Traffic Light Locations ===")
         for tl in self.traffic_lights:
@@ -79,7 +80,7 @@ class CityModel(Model):
             x, y = dest.cell.coordinate
             print(f"Destination at ({x}, {y})")
         print(f"Total destinations: {len(self.destinations)}\n")
-        
+        """
         self.spawn_points = [
             (0, self.height - 1), # Top-left
             (self.width - 1, self.height - 1), # Top-right
@@ -113,7 +114,7 @@ class CityModel(Model):
 
     def step(self):
         """Advance the model by one step."""
-        if self.steps % 10 == 0:
+        if self.steps % 2 == 0:
             if not self.spawn_car():
                 # Check if all four corners are occupied by cars
                 corners_occupied = all(
