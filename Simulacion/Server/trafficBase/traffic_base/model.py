@@ -16,113 +16,133 @@ class CityModel(Model):
     """
 
     def __init__(self, N, seed=42):
-
         super().__init__(seed=seed)
+        
+        self.steps = 0
 
         # Load the map dictionary. The dictionary maps the characters in the map file to the corresponding agent.
-        #print(os.listdir())
         dataDictionary = json.load(open("city_files/mapDictionary.json"))
 
         self.num_agents = N
-        self.traffic_lights = []
-        self.destinations = []
-        self.spawn_points = []
-        self.cars_spawned = 0
-        self.max_cars = N
+        self.traffic_lights = []  
+        self.destinations = []   
+        self.spawn_points = []    
+        self.cars_spawned = 0     # How many cars are spawned so far
+        self.max_cars = N         # Maximum number of cars simultaneously
+        self.cars = []            # List of active cars in the simulation
 
         # Load the map file. The map file is a text file where each character represents an agent.
         with open("city_files/2024_base.txt") as baseFile:
             lines = baseFile.readlines()
+            # Get width (characters per line) and height (number of lines)
             self.width = len(lines[0].strip())
             self.height = len(lines)
 
+            # Create grid with capacity for multiple agents per cell
             self.grid = OrthogonalMooreGrid(
                 [self.width, self.height], capacity=100, torus=False
             )
 
-            # Goes through each character in the map file and creates the corresponding agent.
+            # MAP PARSING: Iterate over each character in the .txt file
+            # Coordinates are inverted in Y so that (0,0) is the bottom left corner
             for r, row in enumerate(lines):
                 for c, col in enumerate(row.strip()):
 
                     cell = self.grid[(c, self.height - r - 1)]
 
+                    # ROADS: Characters v,^,>,<,%,&,_,= represent directions
                     if col in ["v", "^", ">", "<", "%", "&", "_", "="]:
                         agent = Road(f"road_{r}_{c}", self, cell, dataDictionary[col])
 
+                    # TRAFFIC LIGHTS: S (initial red) or s (initial green)
                     elif col in ["S", "s"]:
+                        # Initial state: False=red (S), True=green (s)
+                        initial_state = False if col == "S" else True
+                        # Change time comes from the dictionary
+                        change_time = int(dataDictionary[col])
                         agent = Traffic_Light(
                             f"traffic_{r}_{c}",
                             self,
                             cell,
-                            False if col == "S" else True,
-                            int(dataDictionary[col]),
+                            initial_state,
+                            change_time,
                         )
+                        # Save reference for quick access
                         self.traffic_lights.append(agent)
 
+                    # OBSTACLES: # represents buildings/fixed objects
                     elif col == "#":
                         agent = Obstacle(f"obstacle_{r}_{c}", self, cell)
 
+                    # DESTINATIONS: D is where cars should arrive
                     elif col == "D":
                         agent = Destination(f"dest_{r}_{c}", self, cell)
+                        # Save reference to assign destinations to new cars
                         self.destinations.append(agent)
         
-        """
-        # Debug: Print traffic light locations
-        print("\n=== Traffic Light Locations ===")
-        for tl in self.traffic_lights:
-            x, y = tl.cell.coordinate
-            print(f"Traffic light at ({x}, {y})")
-        print(f"Total traffic lights: {len(self.traffic_lights)}\n")
-        
-        # Debug: Print destination locations
-        print("=== Destination Locations ===")
-        for dest in self.destinations:
-            x, y = dest.cell.coordinate
-            print(f"Destination at ({x}, {y})")
-        print(f"Total destinations: {len(self.destinations)}\n")
-        """
+        # SPAWN POINTS: Corners of the map where new cars appear
+
         self.spawn_points = [
-            (0, self.height - 1), # Top-left
-            (self.width - 1, self.height - 1), # Top-right
-            (0, 0), # Bottom-left
-            (self.width - 1, 0), # Bottom-right
+            (0, self.height - 1),                # Top left corner
+            (self.width - 1, self.height - 1),   # Top right corner
+            (0, 0),                              # Bottom left corner
+            (self.width - 1, 0),                 # Bottom right corner
         ]
 
         self.running = True
 
-    def spawn_car(self):
-        cars_spawned_this_step = 0  # Track how many cars are spawned in this step
-
-        for spawn_point in self.spawn_points:
-            cell = self.grid[spawn_point]
+    # ============================================================
+    # CAR GENERATION
+    # DESCRIPTION: Creates new cars at spawn points
+    # Called every 20 steps to gradually generate traffic
+    # ============================================================
+    def spawn_cars(self):
+        """Generates cars at spawn points every 20 steps"""
+        spawned = 0
+        # Iterate over each spawn point
+        for pos in self.spawn_points:
+            cell = self.grid[pos]
             
-            # Check if there is space at the spawn point
-            has_car = any(isinstance(agent, Car) for agent in cell.agents)
-            if not has_car:
-                destination = choice(self.destinations)
-                Car(
-                    f"car_{self.cars_spawned}",  # Unique ID for the car
-                    self,
-                    cell,
-                    destination.cell
-                )
-                self.cars_spawned += 1  # Increment the total cars spawned
-                cars_spawned_this_step += 1
+            # VALIDATION: Only spawn if there is a road at this point
+            if not any(isinstance(a, Road) for a in cell.agents):
+                continue
+            
+            # VALIDATION: Do not spawn if there is already a car in this cell
+            if any(isinstance(a, Car) for a in cell.agents):
+                continue
+            
+            # DESTINATION: Assign random (rotating) destination from the destination pool
+            destination_cell = None
+            if self.destinations:
+                # Use modulo to cycle through available destinations
+                destination_cell = self.destinations[spawned % len(self.destinations)].cell
+            
+            # CREATION: Instantiate new car with unique ID
+            car_id = f"car_{self.cars_spawned}"
+            new_car = Car(car_id, self, cell, destination_cell)
+            # Save reference to the car
+            self.cars.append(new_car)
+            self.cars_spawned += 1
+            spawned += 1
 
-        # Return True if at least one car was spawned
-        return cars_spawned_this_step > 0
-
+    # ============================================================
+    # SIMULATION STEP
+    # DESCRIPTION: Advances the entire simulation by one step
+    # Generates cars every 20 steps, executes step for all agents,
+    # and cleans up removed cars
+    # ============================================================
     def step(self):
-        """Advance the model by one step."""
-        if self.steps % 2 == 0:
-            if not self.spawn_car():
-                # Check if all four corners are occupied by cars
-                corners_occupied = all(
-                    any(isinstance(agent, Car) for agent in self.grid[corner].agents)
-                    for corner in self.spawn_points
-                )
-                if corners_occupied:
-                    self.running = False
-                    return  # End the simulation
-
+        """Model step"""
+        # Increment step counter
+        self.steps += 1
+        
+        # GENERATION: Spawn new cars every 20 steps
+        if self.steps % 20 == 0:
+            self.spawn_cars()
+        
+        # EXECUTION: Execute step for all agents in random order
         self.agents.shuffle_do("step")
+        
+        # CLEANUP: Remove cars that reached their destination (were removed from the model)
+        # Only keep cars that are still in self.agents
+        self.cars = [c for c in self.cars if c in self.agents]
