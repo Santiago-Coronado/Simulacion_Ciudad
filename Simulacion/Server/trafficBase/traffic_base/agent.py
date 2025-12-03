@@ -47,14 +47,13 @@ class Car(CellAgent):
         self.has_claimed_intersection = False  # C ar has right-of-way
         self.turn_direction = None  # "straight", "left", or "right"
 
-        if self.destination:
-            self.calculate_route()
-
     """
     ======================================================================================================================
     Main Functions
     ======================================================================================================================
     """
+
+
     def update_facing_direction(self):
         """Updates the car's facing direction based on the current road"""
         for agent in self.cell.agents:
@@ -203,7 +202,7 @@ class Car(CellAgent):
             self.current_step_in_path = 0
             self.position_history.clear()
             self.calculate_route()
-            return
+
         
         # Priority 4: Try to move
         if self.path and self.current_step_in_path < len(self.path):

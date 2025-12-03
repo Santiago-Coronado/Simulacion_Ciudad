@@ -759,6 +759,7 @@ async function drawScene() {
   // ACTUALIZACIÓN DE LA SIMULACIÓN
   // Cada segundo: actualiza agentes, sincroniza motos y actualiza semáforos
   if (elapsed >= duration) {
+    console.log(`Actualizando simulación en el step ${Date.now()}`);
     elapsed = 0;
     
     // Solicitar actualización al servidor

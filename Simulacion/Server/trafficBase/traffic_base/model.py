@@ -94,7 +94,6 @@ class CityModel(Model):
     # ============================================================
     # CAR GENERATION
     # DESCRIPTION: Creates new cars at spawn points
-    # Called every 20 steps to gradually generate traffic
     # ============================================================
     def spawn_cars(self):
         """Generates cars at spawn points every 20 steps"""
@@ -128,7 +127,7 @@ class CityModel(Model):
     # ============================================================
     # SIMULATION STEP
     # DESCRIPTION: Advances the entire simulation by one step
-    # Generates cars every 20 steps, executes step for all agents,
+    # Generates cars every n steps, executes step for all agents,
     # and cleans up removed cars
     # ============================================================
     def step(self):
@@ -136,8 +135,8 @@ class CityModel(Model):
         # Increment step counter
         self.steps += 1
         
-        # GENERATION: Spawn new cars every 20 steps
-        if self.steps % 20 == 0:
+        # GENERATION: Spawn new cars every n steps
+        if self.steps % 8 == 0:
             self.spawn_cars()
         
         # EXECUTION: Execute step for all agents in random order
@@ -146,3 +145,26 @@ class CityModel(Model):
         # CLEANUP: Remove cars that reached their destination (were removed from the model)
         # Only keep cars that are still in self.agents
         self.cars = [c for c in self.cars if c in self.agents]
+
+        if self.all_spawn_points_blocked():
+            self.running = False
+
+    def all_spawn_points_blocked(self):
+        """Check if all spawn points have cars or no valid roads"""
+        for pos in self.spawn_points:
+            cell = self.grid[pos]
+            
+            # Check if there's a road at this spawn point
+            has_road = any(isinstance(a, Road) for a in cell.agents)
+            if not has_road:
+                continue
+            
+            # Check if there's already a car at this spawn point
+            has_car = any(isinstance(a, Car) for a in cell.agents)
+            
+            # If there's a road but no car, this spawn point is available
+            if has_road and not has_car:
+                return False
+        
+        # All spawn points are either occupied or invalid
+        return True
