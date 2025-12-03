@@ -4,6 +4,20 @@
         <title>API connection</title>
         <link rel="stylesheet" href="/css/styles.css">
         <script defer type="module" src="traffic_Agents.js"></script>
+        <style>
+            #musicPlayer {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: rgba(0, 0, 0, 0.8);
+                padding: 10px;
+                border-radius: 8px;
+                z-index: 1000;
+            }
+            #musicPlayer audio {
+                width: 250px;
+            }
+        </style>
     </head>
 
     <body>
@@ -11,5 +25,11 @@
             <h1>API connection</h1>
         </div>
         <canvas id="canvas"></canvas>
+
+        <div id="musicPlayer">
+            <audio controls>
+                <source src="/assets/music/TRON.mp3" type="audio/mpeg">
+            </audio>
+        </div>
     </body>
 </html>

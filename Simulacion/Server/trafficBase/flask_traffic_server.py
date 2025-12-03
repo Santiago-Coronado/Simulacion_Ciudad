@@ -27,7 +27,6 @@ def initModel():
         try:
             number_agents = int(request.json.get('NAgents'))
             currentStep = 0
-
         except Exception as e:
             print(e)
             return jsonify({"message": "Error initializing the model"}), 500
@@ -39,6 +38,10 @@ def initModel():
 
     width = cityModel.width
     height = cityModel.height
+
+    # No generar agentes al inicializar
+    # Se crean dinámicamente en cada step del modelo (spawn_cars)
+    print("Modelo inicializado. Se generarán agentes gradualmente...")
 
     # Return a message to saying that the model was created successfully
     return jsonify({"message": f"Parameters recieved, model initiated.\nSize: {width}x{height}"})
@@ -52,27 +55,27 @@ def getAgents():
 
     if request.method == 'GET':
         try:
-            agentCells = cityModel.grid.all_cells.select(
-                lambda cell: any(isinstance(obj, Car) for obj in cell.agents)
-            ).cells
-
-            agents = [
-                (cell.coordinate, agent)
-                for cell in agentCells
-                for agent in cell.agents
-                if isinstance(agent, Car)
-            ]
-
+            # Acceso directo a lista de autos del modelo
+            # En lugar de filtrar todo el grid (mucho más rápido)
+            all_cars = [agent for agent in cityModel.agents if isinstance(agent, Car)]
+            
             agentPositions = [
-                {"id": str(a.unique_id), "x": coordinate[0], "y":1, "z":coordinate[1]}
-                for (coordinate, a) in agents
+                {
+                    "id": str(a.unique_id), 
+                    "x": a.cell.coordinate[0], 
+                    "y": 1, 
+                    "z": a.cell.coordinate[1]
+                }
+                for a in all_cars
             ]
-
+            
             return jsonify({'positions': agentPositions})
         except Exception as e:
-            print(e)
+            print(f"Error en getAgents: {e}")
+            import traceback
+            traceback.print_exc()
             return jsonify({"message": "Error with the agent positions"}), 500
-
+        
 # This route will be used to get the positions of the obstacles
 @app.route('/getObstacles', methods=['GET'])
 @cross_origin()
@@ -186,13 +189,15 @@ def getRoads():
                 if isinstance(agent, Road)
             ]
 
+            # Usar 'directions' (plural) en lugar de 'direction' (singular)
+            # Porque la clase Road en agent.py usa 'self.directions' como una lista
             roadPositions = [
                 {
                     "id": str(a.unique_id), 
                     "x": coordinate[0], 
                     "y": 0, 
                     "z": coordinate[1],
-                    "direction": a.direction
+                    "direction": a.directions[0] if a.directions else "Left"
                 }
                 for (coordinate, a) in roads
             ]
