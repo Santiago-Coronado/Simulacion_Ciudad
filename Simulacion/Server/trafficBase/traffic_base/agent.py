@@ -46,6 +46,7 @@ class Car(CellAgent):
         self.arrival_time_at_intersection = None  # Track when car arrived at intersection
         self.has_claimed_intersection = False  # C ar has right-of-way
         self.turn_direction = None  # "straight", "left", or "right"
+        self.just_spawned = True  # Flag for newly spawned cars
 
     """
     ======================================================================================================================
@@ -53,21 +54,14 @@ class Car(CellAgent):
     ======================================================================================================================
     """
 
-
-    def update_facing_direction(self):
-        """Updates the car's facing direction based on the current road"""
-        for agent in self.cell.agents:
-            if isinstance(agent, Road):
-                # Use the first available direction
-                if agent.directions:
-                    self.facing_direction = agent.directions[0]
-                break
-
     def die(self):
         """ 
         Makes the car disappear
         """
         self.dying = True
+
+        if self.is_at_destination():
+            self.model.cars_reached_destination += 1
         self.remove()
     
     def move(self):
@@ -108,7 +102,7 @@ class Car(CellAgent):
 
     def calculate_route(self):
         """ 
-        Calculates the route to the destination using A* algorithm
+        Calculates the route to the destination using centralized pathfinding
         """
         self.calculating = True
 
@@ -116,64 +110,25 @@ class Car(CellAgent):
             self.calculating = False
             return
         
-        goal = self.destination
-        start = self.cell
-
-        if not self.is_traversable(start):
+        # Use model's centralized pathfinding
+        self.path = self.model.find_path(self.cell, self.destination, car=self)
+        
+        if self.path:
+            self.current_step_in_path = 0
             self.calculating = False
-            return
-        
-        initial_neighbors = self.get_valid_neighbors(start)
-                
-        counter = 0
-        open_set = []
-        heapq.heappush(open_set, (0, counter, start, [start]))
-        
-        g_scores = {start: 0}
-        visited = set()
-        
-        # Increase iterations based on retry attempts
-        max_iterations = 10000 * (1 + self.failed_pathfinding_attempts)
-        iterations = 0
-        
-        while open_set and iterations < max_iterations:
-            iterations += 1
-            current_f, _, current_cell, path = heapq.heappop(open_set)
-            
-            if current_cell in visited:
-                continue
-            
-            visited.add(current_cell)
-            
-            if current_cell == goal:
-                self.path = path[1:]
-                self.current_step_in_path = 0
-                self.calculating = False
-                self.failed_pathfinding_attempts = 0  # Reset on success
-                return
-            
-            neighbors = self.get_valid_neighbors(current_cell)
-            
-            for neighbor in neighbors:
-                if neighbor in visited:
-                    continue
-                
-                tentative_g = g_scores[current_cell] + self.calculate_edge_cost(current_cell, neighbor)
-                
-                if neighbor not in g_scores or tentative_g < g_scores[neighbor]:
-                    g_scores[neighbor] = tentative_g
-                    h_score = self.heuristic(neighbor, goal)
-                    f_score = tentative_g + h_score
-                    
-                    counter += 1
-                    new_path = path + [neighbor]
-                    heapq.heappush(open_set, (f_score, counter, neighbor, new_path))
+            self.failed_pathfinding_attempts = 0
 
-        # Pathfinding failed
-        self.failed_pathfinding_attempts += 1
-        self.wait_before_retry = min(20 * self.failed_pathfinding_attempts, 100) 
-        
-        self.calculating = False
+            if self.facing_direction is None and len(self.path) > 0:
+                next_cell = self.path[0]
+                dx = next_cell.coordinate[0] - self.cell.coordinate[0]
+                dy = next_cell.coordinate[1] - self.cell.coordinate[1]
+                direction_map = {v: k for k, v in self.DIRECTION_OFFSETS.items()}
+                self.facing_direction = direction_map.get((dx, dy))
+        else:
+            # Pathfinding failed
+            self.failed_pathfinding_attempts += 1
+            self.wait_before_retry = min(20 * self.failed_pathfinding_attempts, 100)
+            self.calculating = False
 
     def step(self):
         """Determines what action each car will take next step"""
@@ -189,21 +144,40 @@ class Car(CellAgent):
             self.die()
             return
         
+         # Emergency exit if stuck too long on traffic light**
+        if self.stuck_steps >= 10 and self.has_traffic_light(self.cell):
+            print(f"Car {self.unique_id} emergency exit from traffic light after {self.stuck_steps} stuck steps")
+            x, y = self.cell.coordinate
+            for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < self.model.width and 0 <= ny < self.model.height:
+                    next_cell = self.model.grid[(nx, ny)]
+                    if self.can_move_to_cell(next_cell) and self.is_traversable(next_cell):
+                        self.cell = next_cell
+                        self.stuck_steps = 0
+                        self.path = []
+                        self.position_history.clear()
+                        self.current_step_in_path = 0
+                        self.calculate_route()
+                        return
+            # If no valid exit found, try recalculating
+            self.path = []
+            self.current_step_in_path = 0
+            self.calculate_route()
+            return
+        
         # Priority 2: Calculate route if not done yet
         if not self.path and not self.calculating:
             self.calculate_route()
-            if not self.path:
-                self.stop()
-                return
-        
+
         # Priority 3: Check if path is exhausted but not at destination
         if self.path and self.current_step_in_path >= len(self.path):
+            # Allow recalculation even on traffic lights if path exhausted
             self.path = []
             self.current_step_in_path = 0
             self.position_history.clear()
             self.calculate_route()
 
-        
         # Priority 4: Try to move
         if self.path and self.current_step_in_path < len(self.path):
             next_cell = self.path[self.current_step_in_path]
@@ -213,14 +187,24 @@ class Car(CellAgent):
                 self.stuck_steps = 0
                 return
             else:
-                self.waiting = True
+                self.stop()
                 self.stuck_steps += 1
 
             is_blocked_by_car = any(isinstance(agent, Car) for agent in next_cell.agents)
             has_traffic_light = any(isinstance(agent, Traffic_Light) for agent in next_cell.agents)
 
             if is_blocked_by_car and not has_traffic_light and not self.is_near_traffic_light(1):
-                    # Try lane change first
+                    blocking_car_waiting = any(isinstance(agent, Car) and agent.waiting for agent in next_cell.agents)
+                    if blocking_car_waiting:
+                        # Recalculate immediately to find alternative route
+                        self.path = []
+                        self.current_step_in_path = 0
+                        self.position_history.clear()
+                        self.calculate_route()
+                        self.stuck_steps = 0
+                        return
+                    
+                    # Try lane change second
                     lane_change_cell = self.can_change_lane()
                     if lane_change_cell:
                         self.cell = lane_change_cell
@@ -238,10 +222,9 @@ class Car(CellAgent):
                         self.position_history.clear()
                         self.calculate_route()
                         self.stuck_steps = 0
-                        return
         
         # Priority 5: Try lane change if stuck (not at traffic lights)
-        if self.waiting and self.stuck_steps >= 3 and not self.is_near_traffic_light(1):
+        if self.waiting and self.stuck_steps >= 2 and not self.is_near_traffic_light(1):
             lane_change_cell = self.can_change_lane()
             if lane_change_cell:
                 self.cell = lane_change_cell
@@ -252,8 +235,8 @@ class Car(CellAgent):
                 self.calculate_route()
                 return
         
-        # Priority 6: Recalculate if stuck too long (not at traffic lights)
-        if self.stuck_steps >= 10 and not self.is_near_traffic_light(2):
+        # Priority 6: Recalculate if stuck too long
+        if self.stuck_steps >= 5 and not self.is_near_traffic_light(2):
             self.path = []
             self.current_step_in_path = 0
             self.position_history.clear()
@@ -265,11 +248,6 @@ class Car(CellAgent):
     Helper Functions
     =====================================================================================================================0
     """
-
-    def heuristic(self, cell, goal):
-        """Manhattan distance heuristic"""
-        return abs(cell.coordinate[0] - goal.coordinate[0]) + abs(cell.coordinate[1] - goal.coordinate[1])
-    
     def has_traffic_light(self, cell):
         """Check if cell has a traffic light"""
         return any(isinstance(agent, Traffic_Light) for agent in cell.agents)
@@ -278,114 +256,11 @@ class Car(CellAgent):
         """Check if cell has a road"""
         return any(isinstance(agent, Road) for agent in cell.agents)
     
-    def get_cars_in_cell(self, cell):
-        """Count non-dying cars in cell"""
-        return sum(1 for agent in cell.agents if isinstance(agent, Car) and not agent.dying)
-    
     def _get_neighbor_cell(self, x, y):
         """Get cell at coordinates if valid"""
         if 0 <= x < self.model.grid.width and 0 <= y < self.model.grid.height:
             return self.model.grid[(x, y)]
         return None
-    
-    def get_valid_neighbors(self, cell):
-        """Gets valid neighboring cells based on road directions, prioritizing less congested lanes"""
-        x, y = cell.coordinate
-        
-        if self.has_traffic_light(cell):
-            neighbors = self._get_traffic_light_neighbors(x, y)
-        else:
-            neighbors = self._get_road_neighbors(cell, x, y)
-        
-        return sorted(neighbors, key=self._get_congestion_score)
-    
-    def _get_traffic_light_neighbors(self, x, y):
-        """Get neighbors when at traffic light - allow all valid directions for pathfinding"""
-        neighbors = []
-        
-        # During pathfinding, explore all traversable directions
-        for direction, (dx, dy) in self.DIRECTION_OFFSETS.items():
-            neighbor = self._get_neighbor_cell(x + dx, y + dy)
-            if neighbor and self.is_traversable(neighbor):
-                # Verify the neighbor allows this approach direction
-                if self.has_road(neighbor):
-                    for agent in neighbor.agents:
-                        if isinstance(agent, Road):
-                            # Check if we can enter this road from current direction
-                            opposite_dir = {"Up": "Down", "Down": "Up", "Left": "Right", "Right": "Left"}[direction]
-                            if direction in agent.directions or opposite_dir in agent.directions:
-                                neighbors.append(neighbor)
-                                break
-                elif self.has_traffic_light(neighbor) or any(isinstance(a, Destination) for a in neighbor.agents):
-                    neighbors.append(neighbor)
-        
-        return neighbors
-    
-    def _get_road_neighbors(self, cell, x, y):
-        """Get neighbors when on regular road"""
-        neighbors = []
-        allowed_dirs = [d for agent in cell.agents if isinstance(agent, Road) for d in agent.directions]
-        
-        for direction in allowed_dirs:
-            if direction in self.DIRECTION_OFFSETS:
-                dx, dy = self.DIRECTION_OFFSETS[direction]
-                neighbor = self._get_neighbor_cell(x + dx, y + dy)
-
-                if neighbor and self.is_traversable(neighbor) and neighbor != cell:
-                    neighbors.append(neighbor)
-        return neighbors
-    
-    def _get_congestion_score(self, neighbor_cell):
-        """Calculate congestion score for sorting"""
-        score = 20 if neighbor_cell in self.position_history else 0
-        score += self.get_cars_in_cell(neighbor_cell) * 8
-        
-        # Check surrounding area (2-cell radius)
-        for dx in range(-2, 3):
-            for dy in range(-2, 3):
-                if dx == 0 and dy == 0:
-                    continue
-                neighbor = self._get_neighbor_cell(neighbor_cell.coordinate[0] + dx, neighbor_cell.coordinate[1] + dy)
-                if neighbor:
-                    distance = max(abs(dx), abs(dy))
-                    score += self.get_cars_in_cell(neighbor) / (distance ** 2)
-        
-        # Red light penalty
-        if any(isinstance(a, Traffic_Light) and not a.state for a in neighbor_cell.agents):
-            score += 3
-        
-        return score
-        
-    def calculate_edge_cost(self, from_cell, to_cell):
-        """Calculates the cost to move from one cell to another"""
-        base_cost = 1.0
-
-        # Recent path backtracking penalty
-        if self.path and 0 < self.current_step_in_path <= len(self.path):
-            lookback = min(3, self.current_step_in_path)
-            if to_cell in self.path[max(0, self.current_step_in_path - lookback):self.current_step_in_path]:
-                base_cost += 50
-        
-        # Traffic light timing penalties
-        for agent in to_cell.agents:
-            if isinstance(agent, Traffic_Light):
-                current_time = self.model.steps % agent.timeToChange
-                time_until_change = agent.timeToChange - current_time
-                base_cost += min(time_until_change * 0.5, 5) if not agent.state else \
-                            (agent.timeToChange - time_until_change) * 0.3 if self.heuristic(self.cell, to_cell) / 2 > time_until_change else 0.1
-        
-        # Car density and surrounding traffic penalties
-        car_count = self.get_cars_in_cell(to_cell)
-        base_cost += car_count * 2.0
-        
-        surrounding_cars = sum(
-            self.get_cars_in_cell(neighbor) / (max(abs(dx), abs(dy)) ** 2)
-            for dx in range(-2, 3) for dy in range(-2, 3)
-            if (dx != 0 or dy != 0) and (neighbor := self._get_neighbor_cell(to_cell.coordinate[0] + dx, to_cell.coordinate[1] + dy))
-        )
-        base_cost += surrounding_cars * 0.5
-        
-        return base_cost
 
     def is_traversable(self, cell):
         """Checks if a cell can be used in pathfinding (ignores temporary obstacles like cars)"""
@@ -403,14 +278,25 @@ class Car(CellAgent):
     
     def can_move_to_cell(self, cell):
         """Checks if the car can move to a cell in the current step (includes traffic lights and other cars)"""
-        # Check traffic light state only if car is NOT already on a traffic light
-        if not self.has_traffic_light(self.cell) and self.has_traffic_light(cell):
+        
+        # Check if target cell is traversable and has no other cars
+        if not self.is_traversable(cell) or any(isinstance(agent, Car) for agent in cell.agents):
+            return False
+        
+        # If on top of a traffic light, can always move off it
+        if self.has_traffic_light(self.cell):
+            return True
+        
+        # **SIMPLIFIED TRAFFIC LIGHT LOGIC** (similar to example code)
+        # Only block movement if ENTERING a red light (not when leaving one)
+        if self.has_traffic_light(cell):
             for agent in cell.agents:
                 if isinstance(agent, Traffic_Light) and not agent.state:
-                    return False
-    
-        # Check if cell is traversable and has no other cars
-        return self.is_traversable(cell) and not any(isinstance(agent, Car) for agent in cell.agents)
+                    # Only block if we're NOT already on a traffic light
+                    if not self.has_traffic_light(self.cell):
+                        return False
+        
+        return True
     
     def is_at_destination(self):
         """Checks if the car has reached its destination"""
@@ -502,95 +388,6 @@ class Car(CellAgent):
                             cars_at_intersection.append(agent)
         
         return cars_at_intersection
-
-    def has_right_of_way(self):
-        """Determine if this car has right-of-way at intersection"""
-        if not self.is_at_intersection():
-            return True  # Not at intersection, can move freely
-        
-        # Check traffic light state first
-        traffic_light = next((a for a in self.cell.agents if isinstance(a, Traffic_Light)), None)
-        if traffic_light and not traffic_light.state:
-            return False
-        
-        # Set arrival time if just arrived
-        if self.arrival_time_at_intersection is None:
-            self.arrival_time_at_intersection = self.model.steps
-        
-        # Get other cars at intersection
-        other_cars = self.get_cars_at_same_intersection()
-        
-        if not other_cars:
-            return True
-        
-        # Update turn direction
-        if self.path and self.current_step_in_path < len(self.path):
-            next_cell = self.path[self.current_step_in_path]
-            self.turn_direction = self.get_turn_direction(self.cell, next_cell)
-        
-        # Rule 1: First to arrive, first to go
-        earliest_arrival = min((c.arrival_time_at_intersection for c in other_cars 
-                               if c.arrival_time_at_intersection is not None), 
-                              default=self.model.steps + 1)
-        
-        if self.arrival_time_at_intersection < earliest_arrival:
-            return True
-        
-        # Rule 2: Tie goes to the right
-        cars_arrived_same_time = [c for c in other_cars 
-                                  if c.arrival_time_at_intersection == self.arrival_time_at_intersection]
-        
-        if cars_arrived_same_time:
-            # Check if any car is to my right (based on facing direction)
-            for other_car in cars_arrived_same_time:
-                if self.is_car_to_my_right(other_car):
-                    return False
-            
-            # Rule 3 & 4: Handle straight vs turns
-            for other_car in cars_arrived_same_time:
-                if self.is_across_from(other_car):
-                    # Both going straight - both can go
-                    if self.turn_direction == "straight" and other_car.turn_direction == "straight":
-                        return True
-                    
-                    # One straight, one turning - straight goes first
-                    if self.turn_direction != "straight" and other_car.turn_direction == "straight":
-                        return False
-                    
-                    # Both turning - right turn has priority
-                    if self.turn_direction == "left" and other_car.turn_direction == "right":
-                        return False
-        
-        return True
-
-    def is_car_to_my_right(self, other_car):
-        """Check if another car is to the right of this car at intersection"""
-        if not self.facing_direction or not other_car.facing_direction:
-            return False
-        
-        dx = other_car.cell.coordinate[0] - self.cell.coordinate[0]
-        dy = other_car.cell.coordinate[1] - self.cell.coordinate[1]
-        
-        # Determine relative position based on facing direction
-        if self.facing_direction == "Up":
-            return dx > 0  # Right is positive x
-        elif self.facing_direction == "Down":
-            return dx < 0  # Right is negative x
-        elif self.facing_direction == "Left":
-            return dy < 0  # Right is negative y
-        elif self.facing_direction == "Right":
-            return dy > 0  # Right is positive y
-        
-        return False
-
-    def is_across_from(self, other_car):
-        """Check if another car is directly across the intersection"""
-        if not self.facing_direction or not other_car.facing_direction:
-            return False
-        
-        # Cars are across if facing opposite directions
-        opposite_dir = {"Up": "Down", "Down": "Up", "Left": "Right", "Right": "Left"}
-        return other_car.facing_direction == opposite_dir.get(self.facing_direction)
     
 """
 =======================================================================================================================
