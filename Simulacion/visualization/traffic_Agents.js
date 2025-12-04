@@ -903,6 +903,7 @@ async function drawScene() {
   // === SIMULATION STEP ===
   // Update the scene after the elapsed duration
   if (elapsed >= duration) {
+    console.log(`Actualizando simulación en el step ${Date.now()}`);
     elapsed = 0;
     
     // Request update from API
