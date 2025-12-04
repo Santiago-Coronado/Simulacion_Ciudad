@@ -5,7 +5,7 @@ from mesa.datacollection import DataCollector
 from .agent import *
 import os
 import json
-
+import requests
 
 class CityModel(Model):
     """
@@ -352,6 +352,29 @@ class CityModel(Model):
         # Collect data for this step
         self.datacollector.collect(self)
 
+        # Api connection to send simulation data
+        url = "http://10.49.12.39:5000/api/"
+        endpoint = "validate_attempt"
+
+        data = {
+            "year" : 2025,
+            "classroom" : 302,
+            "name" : "Equipo Los Troneadores",
+            "current_cars": len(self.cars),
+            "total_arrived": self.cars_reached_destination,
+            "attempt_number": 5
+        }
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+
+        response = requests.post(url+endpoint, data=json.dumps(data), headers=headers)
+        print("Data: ",data)
+
+        print("Request " + "successful" if response.status_code == 200 else "failed", "Status code:", response.status_code)
+        print("Response:", response.json())
+
     # ============================================================
     # SPAWN POINT CHECK 
     # DESCRIPTION: Checks if all spawn points are blocked
@@ -377,4 +400,4 @@ class CityModel(Model):
                 blocked_spawn_points += 1
         
         # Only end simulation if we have valid spawn points and all are blocked
-        return valid_spawn_points > 0 and blocked_spawn_points == valid_spawn_points
+        return valid_spawn_points > 0 and blocked_spawn_points == valid_spawn_points    
