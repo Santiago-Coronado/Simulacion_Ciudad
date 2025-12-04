@@ -46,7 +46,6 @@ class Car(CellAgent):
         self.arrival_time_at_intersection = None  # Track when car arrived at intersection
         self.has_claimed_intersection = False  # C ar has right-of-way
         self.turn_direction = None  # "straight", "left", or "right"
-        self.just_spawned = True  # Flag for newly spawned cars
 
     """
     ======================================================================================================================
@@ -110,7 +109,7 @@ class Car(CellAgent):
             self.calculating = False
             return
         
-        # Use model's centralized pathfinding
+        # Use model centralized pathfinding
         self.path = self.model.find_path(self.cell, self.destination, car=self)
         
         if self.path:
@@ -144,7 +143,7 @@ class Car(CellAgent):
             self.die()
             return
         
-         # Emergency exit if stuck too long on traffic light**
+         # Emergency exit if stuck too long on traffic light
         if self.stuck_steps >= 10 and self.has_traffic_light(self.cell):
             print(f"Car {self.unique_id} emergency exit from traffic light after {self.stuck_steps} stuck steps")
             x, y = self.cell.coordinate
@@ -172,7 +171,6 @@ class Car(CellAgent):
 
         # Priority 3: Check if path is exhausted but not at destination
         if self.path and self.current_step_in_path >= len(self.path):
-            # Allow recalculation even on traffic lights if path exhausted
             self.path = []
             self.current_step_in_path = 0
             self.position_history.clear()
@@ -287,7 +285,6 @@ class Car(CellAgent):
         if self.has_traffic_light(self.cell):
             return True
         
-        # **SIMPLIFIED TRAFFIC LIGHT LOGIC** (similar to example code)
         # Only block movement if ENTERING a red light (not when leaving one)
         if self.has_traffic_light(cell):
             for agent in cell.agents:
@@ -330,7 +327,7 @@ class Car(CellAgent):
             neighbor_cell = self._get_neighbor_cell(self.cell.coordinate[0] + dx, self.cell.coordinate[1] + dy)
             
             if neighbor_cell:
-                # Check if it's a valid road in the same direction
+                # Check if it is a valid road in the same direction
                 for agent in neighbor_cell.agents:
                     if isinstance(agent, Road) and self.facing_direction in agent.directions:
                         if self.can_move_to_cell(neighbor_cell):
