@@ -845,10 +845,10 @@ async function drawScene() {
       trafficLightPositions.push(pos[0], pos[1], pos[2]);
 
       // Cyan light color
-      trafficLightColors.push(0.0, 0.4, 0.4);
+      trafficLightColors.push(0.0, 2, 2);
 
       // Light range
-      trafficLightRanges.push(2.5); 
+      trafficLightRanges.push(1); 
 
       currentLights++;
     }
