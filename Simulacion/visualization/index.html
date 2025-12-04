@@ -1,28 +1,35 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>API connection</title>
+        <title>TRON: Simulation</title>
         <link rel="stylesheet" href="/css/styles.css">
         <script defer type="module" src="traffic_Agents.js"></script>
         <style>
+            body {
+                background-color: #1A1A33;
+            }
+
+            #headerContainer {
+                background-color: #A2D3D9;
+            }
+
             #musicPlayer {
                 position: fixed;
                 bottom: 20px;
                 right: 20px;
-                background: rgba(0, 0, 0, 0.8);
                 padding: 10px;
                 border-radius: 8px;
                 z-index: 1000;
             }
             #musicPlayer audio {
-                width: 250px;
+                width: 125px;
             }
         </style>
     </head>
 
     <body>
         <div id='headerContainer'>
-            <h1>API connection</h1>
+            <h1>TRON: Simulation</h1>
         </div>
         <canvas id="canvas"></canvas>
 
