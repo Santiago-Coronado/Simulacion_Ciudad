@@ -643,8 +643,6 @@ function syncCycles() {
         // Apply offset to match spawn orientation
         agent.rotDeg.y = (angleRad * 180 / Math.PI) + ROTATION_OFFSET;
         agent.rotRad.y = angleRad + (ROTATION_OFFSET * Math.PI / 180);
-        
-        agent._visible = true;
       }
       
       agent._startPos = currentTile;
@@ -864,7 +862,6 @@ async function drawScene() {
     u_trafficLightPositions: trafficLightPositions,
     u_trafficLightColors: trafficLightColors,
     u_trafficLightRange: trafficLightRanges,
-    u_numTrafficLights: trafficLights.length,
     u_numTrafficLights: trafficLightPositions.length / 3,    // Pass total light count to shader
   }
   
