@@ -39,10 +39,6 @@ def initModel():
     width = cityModel.width
     height = cityModel.height
 
-    # No generar agentes al inicializar
-    # Se crean dinámicamente en cada step del modelo (spawn_cars)
-    print("Modelo inicializado. Se generarán agentes gradualmente...")
-
     # Return a message to saying that the model was created successfully
     return jsonify({"message": f"Parameters recieved, model initiated.\nSize: {width}x{height}"})
 
@@ -55,8 +51,7 @@ def getAgents():
 
     if request.method == 'GET':
         try:
-            # Acceso directo a lista de autos del modelo
-            # En lugar de filtrar todo el grid (mucho más rápido)
+            # Direct access to the car list
             all_cars = [agent for agent in cityModel.agents if isinstance(agent, Car)]
             
             agentPositions = [
@@ -189,8 +184,6 @@ def getRoads():
                 if isinstance(agent, Road)
             ]
 
-            # Usar 'directions' (plural) en lugar de 'direction' (singular)
-            # Porque la clase Road en agent.py usa 'self.directions' como una lista
             roadPositions = [
                 {
                     "id": str(a.unique_id), 
