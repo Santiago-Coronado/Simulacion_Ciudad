@@ -155,9 +155,9 @@ async function getTrafficLights() {
 }
 
 // ============================================================
-// ACTUALIZACIÓN DE ESTADOS DE SEMÁFOROS
-// DESCRIPCIÓN: Sincroniza los estados de los semáforos con el servidor
-// Se llama cada ciclo de simulación para actualizar colores dinámicamente
+// TRAFFIC LIGHT STATE
+// LITTLE DESCRIPTION: Synchronizes traffic light states with the server
+// Called every simulation cycle to dynamically update colors
 // ============================================================
 async function updateTrafficLights() {
     try {
@@ -165,16 +165,16 @@ async function updateTrafficLights() {
 
         if (response.ok) {
             let result = await response.json();
-            // Crear mapa para búsqueda rápida
+            // Create map
             const serverTrafficLights = new Map(result.positions.map(tl => [tl.id, tl]));
 
-            // Actualizar estados locales con datos del servidor
+            // Update local states with data from the server
             for (const trafficLight of trafficLights) {
                 const serverData = serverTrafficLights.get(trafficLight.id);
                 if (serverData) {
-                    // Actualizar estado del semáforo
+                    // Update traffic light status
                     trafficLight.state = serverData.state;
-                    // Actualizar intervalo de cambio
+                    // Update change interval
                     trafficLight.timeToChange = serverData.timeToChange;
                 }
             }
@@ -185,9 +185,9 @@ async function updateTrafficLights() {
 }
 
 // ============================================================
-// OBTENCIÓN DE DESTINOS
-// DESCRIPCIÓN: Solicita al servidor la ubicación de todos los destinos
-// Se llama una sola vez durante la inicialización
+// DESTINATIONS
+// LITTLE DESCRIPTION: Requests the server to retrieve the location of all destinations
+// Called only once during initialization
 // ============================================================
 async function getDestinations() {
     try {
@@ -196,7 +196,7 @@ async function getDestinations() {
         if (response.ok) {
             let result = await response.json();
 
-            // Crear objeto 3D para cada destino
+            // Create a 3D model for the destination
             for (const dest of result.positions) {
                 const newDest = new Object3D(dest.id, [dest.x, dest.y, dest.z]);
                 destinations.push(newDest);
@@ -208,9 +208,9 @@ async function getDestinations() {
 }
 
 // ============================================================
-// OBTENCIÓN DE CARRETERAS
-// DESCRIPCIÓN: Solicita al servidor las carreteras y sus direcciones
-// Se llama una sola vez durante la inicialización
+// OBTAIN ROADS
+// LITTLE DESCRIPTION: Requests roads and their addresses from the server
+// Called only once during initialization
 // ============================================================
 async function getRoads() {
     try {
@@ -219,10 +219,10 @@ async function getRoads() {
         if (response.ok) {
             let result = await response.json();
 
-            // Crear objeto 3D para cada carretera
+            // Create a 3D object for each road
             for (const road of result.positions) {
                 const newRoad = new Object3D(road.id, [road.x, road.y, road.z]);
-                // Guardar dirección permitida en esa carretera
+                // Save allowed address on that road
                 newRoad.direction = road.direction;
                 roads.push(newRoad);
             }
