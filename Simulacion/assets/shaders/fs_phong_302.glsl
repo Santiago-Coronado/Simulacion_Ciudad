@@ -1,131 +1,140 @@
 #version 300 es
 precision highp float;
 
+// ============================================================
+// INPUT VARIABLES
+// Interpolated data passed from the vertex shader
+// ============================================================
 in vec3 v_normal;
 in vec3 v_surfaceToLight;
 in vec3 v_surfaceToView;
 in vec4 v_color;
-in vec3 v_worldPosition;
- 
-// Scene uniforms
+in vec3 v_worldPosition; // Required for point light distance calculation 
+
+// ============================================================
+// SCENE UNIFORMS
+// Global lighting settings
+// ============================================================
 uniform vec4 u_ambientLight;
 uniform vec4 u_diffuseLight;
 uniform vec4 u_specularLight;
 
-// UNIFORMS DE SEMÁFOROS
-// Arrays que guardan información de hasta 27 semáforos simultáneamente.
-// u_trafficLightPositions: posición XYZ de cada esfera de semáforo
-// u_trafficLightColors: color RGB (verde o rojo) de cada luz
-// u_trafficLightRange: alcance máximo de cada luz
-// u_numTrafficLights: cuántos semáforos realmente hay en la escena
-uniform vec3 u_trafficLightPositions[27];
-uniform vec3 u_trafficLightColors[27];
-uniform float u_trafficLightRange[27];
+// ============================================================
+// MULTI-LIGHT UNIFORMS (TRAFFIC & CYCLES)
+// Arrays holding data for up to 100 dynamic point lights simultaneously
+// ============================================================
+// u_trafficLightPositions: XYZ position of each light source 
+// u_trafficLightColors: RGB color of the light 
+// u_trafficLightRange: Maximum effective distance of the light 
+// u_numTrafficLights: Actual number of active lights in the scene 
+uniform vec3 u_trafficLightPositions[100]; 
+uniform vec3 u_trafficLightColors[100]; 
+uniform float u_trafficLightRange[100]; 
 uniform int u_numTrafficLights;
 
-// UNIFORMS PARA OBJETOS EMISIVOS
-// u_isEmissive: 1.0 si el objeto emite luz, 0.0 si no
-// u_emissiveColor: color RGB de la luz que emite (ej: [0, 2, 0] para verde intenso)
-uniform float u_isEmissive;
-uniform vec3 u_emissiveColor;
+// ============================================================
+// EMISSIVE OBJECT UNIFORMS
+// Parameters for objects that glow (ignore shadows)
+// ============================================================
+// u_isEmissive: > 0.5 if the object glows, 0.0 otherwise
+// u_emissiveColor: RGB color of the emitted light
+uniform float u_isEmissive; 
+uniform vec3 u_emissiveColor; 
 
 out vec4 outColor;
 
-// FUNCIÓN DE ATENUACIÓN DE LUZ
-// Calcula cuánto "brilla" la luz según la distancia.
-// - Si distance > range: la luz no llega (atenuación = 0)
-// - Si distance = 0: brilla al máximo (atenuación = 1)
-// - Si distance = range: empieza a apagarse
-// Usa una fórmula cuadrática suave: 1 - (distance/range)²
-// Esto hace que la luz desaparezca de forma más natural que lineal.
+// ============================================================
+// ATTENUATION FUNCTION
+// LITTLE DESCRIPTION: Calculates light intensity falloff based on distance
+// using a smooth quadratic formula: 1 - (distance/range)^2
+// ============================================================
 float calculateAttenuation(float distance, float range) {
-    // Si la distancia es mayor que el rango, atenuación = 0
+    // If distance exceeds range, light does not reach (attenuation = 0)
     if (distance > range) {
-        return 0.0;
+        return 0.0; 
     }
     
-    // Atenuación cuadrática suave
-    // A mayor distancia, menor brillo
-    float normalized = distance / range;  // Normalizar a rango 0.0-1.0
-    float attenuation = 1.0 - (normalized * normalized);  // Fórmula cuadrática: 1 - x²
+    // Smooth quadratic attenuation
+    // The greater the distance, the lower the brightness
+    float normalized = distance / range;
+    // Formula: 1 - x^2 provides a natural falloff
+    float attenuation = 1.0 - (normalized * normalized);
     
     return max(0.0, attenuation);
 }
 
 void main() {
-    // RAMA PARA OBJETOS EMISIVOS
-    // Si este objeto emite luz (como las esferas de los semáforos),
-    // simplemente mostramos su color emisivo sin aplicar iluminación normal.
-    // Esto hace que brille con luz propia.
-    if (u_isEmissive > 0.5) {
+    // ============================================================
+    // EMISSIVE CHECK
+    // If this object emits light (like traffic light spheres),
+    // render pure emissive color and skip standard lighting calculations
+    // ============================================================
+    if (u_isEmissive > 0.5) { 
         outColor = vec4(u_emissiveColor, 1.0);
         return;
     }
     
-    // v_normal must be normalized because the shader will interpolate
-    // it for each fragment
+    // ============================================================
+    // VECTOR NORMALIZATION
+    // Normalize interpolated vectors for accurate lighting math
+    // ============================================================
     vec3 normal = normalize(v_normal);
-
-    // Normalize the other incoming vectors
-    vec3 surfToLigthDirection = normalize(v_surfaceToLight);
+    vec3 surfToLigthDirection = normalize(v_surfaceToLight); 
     vec3 surfToViewDirection = normalize(v_surfaceToView);
 
-    // CALCULATIONS FOR THE AMBIENT, DIFFUSE and SPECULAR COMPONENTS
+    // ============================================================
+    // PHONG REFLECTION MODEL (BASE LIGHTING)
+    // Calculates Ambient, Diffuse and Specular components using vertex color
+    // ============================================================
+    
+    // Diffuse component (Lambert)
     float diffuse = max(dot(normal, surfToLigthDirection), 0.0);
-    float specular = 0.0;
+    float specular = 0.0; 
 
+    // Specular component (Phong)
     if (diffuse > 0.0){
-        vec3 r = 2.0 * diffuse * normal - surfToLigthDirection; 
+        vec3 r = 2.0 * diffuse * normal - surfToLigthDirection;
         specular = pow(max(dot(surfToViewDirection, r), 0.0), 32.0);
     }
 
-    // Use the color from the model (a_color / v_color)
-    // Compute the three parts of the Phong lighting model
+    // Combine components using the model's vertex color (v_color)
     vec4 ambientColor = v_color * u_ambientLight;
     vec4 diffuseColor = u_diffuseLight * v_color * diffuse;
     vec4 specularColor = u_specularLight * vec4(1.0) * specular;
 
-    // Combine all lighting components
     vec4 finalColor = ambientColor + diffuseColor + specularColor;
 
-    // LOOP DE ILUMINACIÓN DE SEMÁFOROS
-    // Por cada semáforo (máximo 27), calcula cuánto ilumina a este píxel.
-    // La iluminación depende de:
-    // 1. La distancia entre el píxel y la esfera del semáforo (usando Pitágoras)
-    // 2. La atenuación según esa distancia
-    // 3. La orientación de la superficie (dot product con la normal)
-    for (int i = 0; i < 27; i++) {
+    // ============================================================
+    // DYNAMIC POINT LIGHTS LOOP
+    // Accumulates lighting from traffic lights and agents (max 100)
+    // based on distance, range, and surface orientation
+    // ============================================================
+   for (int i = 0; i < 100; i++) {
         if (i >= u_numTrafficLights) break;
-        
-        // CALCULAR DISTANCIA USANDO PITÁGORAS
-        // trafficLightDir es el vector desde el píxel hasta la luz
-        // length() calcula la magnitud: √(dx² + dy² + dz²)
+
+        // 1. Calculate vector and distance from pixel to light source
         vec3 trafficLightDir = u_trafficLightPositions[i] - v_worldPosition;
         float distToLight = length(trafficLightDir);
         
-        // CALCULAR ATENUACIÓN POR DISTANCIA
-        // Obtiene un valor entre 0.0 (apagado) y 1.0 (al máximo brillo)
+        // 2. Calculate attenuation factor (0.0 to 1.0)
         float attenuation = calculateAttenuation(distToLight, u_trafficLightRange[i]);
-        
-        // SI HAY ATENUACIÓN (la luz llega a este píxel)
+
+        // Only process if light reaches this pixel
         if (attenuation > 0.0) {
-            // Normalizar la dirección a la luz
+            // Normalize direction to light
             trafficLightDir = normalize(trafficLightDir);
-            
-            // CALCULAR COMPONENTE DIFUSA DEL SEMÁFORO
-            // dot(normal, trafficLightDir) mide cuánto la luz apunta a esta superficie
-            // Si el surface mira a la luz: valor alto (iluminado)
-            // Si mira para otro lado: valor bajo (en sombra)
+
+            // 3. Calculate Diffuse component for this point light
+            // Dot product determines if surface faces the light
             float trafficDiffuse = max(dot(normal, trafficLightDir), 0.0);
-            
-            // COMBINAR: color del semáforo × atenuación × componente difusa
-            // Esto genera el efecto final de iluminación de la luz del semáforo
-            vec3 trafficColor = u_trafficLightColors[i] * attenuation * trafficDiffuse;
-            
-            // SUMAR la iluminación del semáforo al color final
+
+            // 4. Combine: Light Color * Attenuation * Diffuse Factor
+           vec3 trafficColor = u_trafficLightColors[i] * attenuation * trafficDiffuse;
+
+            // Add contribution to final pixel color
             finalColor.rgb += trafficColor;
         }
     }
     
-    outColor = finalColor;
+   outColor = finalColor;
 }
