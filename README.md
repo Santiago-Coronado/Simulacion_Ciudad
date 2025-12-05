@@ -40,3 +40,49 @@ Imagina una solución que implemente una de las siguientes estrategias de ejempl
 
 ### Etapa 2.2: Animación gráfica en tres dimensiones
 ¿Cómo se implementa un sistema 3D para visualizar los datos de movimiento de los automóviles, resultado de la simulación?
+
+## Como correr el proyecto
+### Clona el Repositorio
+```bash
+git clone git@github.com:Santiago-Coronado/Simulacion_Ciudad.git
+```
+
+### Instala dependencias de proyecto (Dentro de la carpeta Simulacion)
+```bash
+npm install
+```
+
+### Crea el entorno virtual (En la raíz del Repositorio)
+
+```bash
+python -m venv .agents
+```
+### Activa el entorno virtual
+
+```bash
+./.agents/Scripts/activate
+```
+### Instala dependencias para correr el proyecto
+
+```bash
+pip install -U "mesa[all]"
+pip install flask flask_cors
+```
+### (Opción 1) Ejecuta la simulación de Solara (Dentro de la carpeta Server\trafficBase)
+
+```bash
+solara run server.py
+```
+
+### (Opción 2) Ejecuta la simulación de Flask 
+(Dentro de la carpeta Server\trafficBase)
+```bash
+python .\flask_traffic_server.py
+```
+
+(Dentro de la carpeta Simulacion)
+```bash
+npx vite
+```
+
+
